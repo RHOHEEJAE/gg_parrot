@@ -1,0 +1,29 @@
+@tailwind base;
+/* GGparrot(껄무새) — 코인 매크로 백테스트/페이퍼 데모 */
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-950 text-slate-100;
+  font-family: system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+/* '오늘의 경주마' marquee — seamless loop of a duplicated track. */
+@keyframes ggp-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.ggp-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: ggp-marquee var(--ggp-marquee-duration, 40s) linear infinite;
+  will-change: transform;
+}
+.ggp-marquee:hover .ggp-marquee-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Respect reduced-motion: stop the flow and let users scroll the strip. */
+  .ggp-marquee { overflow-x: auto; }
+  .ggp-marquee-track { animation: none; }
+}

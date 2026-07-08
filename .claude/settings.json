@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements 2>&1)",
+      "Bash(PAPER_REPLAY_SECONDS=0.05 python -m uvicorn app.main:app --port 8020)",
+      "Bash(curl -s -X POST http://localhost:8020/api/realtrade/bundle -H 'Content-Type: application/json' -d '{\"macro\":{\"symbol\":\"BTCUSDT\",\"rule_type\":\"A\",\"position_side\":\"short\",\"params\":{\"take_profit_pct\":5,\"initial_capital\":1000000},\"risk\":{\"invest_ratio\":0.5,\"stop_loss_pct\":3}}}' -o /tmp/bundle.zip -D -)",
+      "Bash(python -c \"import zipfile; z=zipfile.ZipFile\\('/tmp/bundle.zip'\\); print\\(z.namelist\\(\\)\\); print\\('--- macro.json ---'\\); print\\(z.read\\('macro.json'\\).decode\\('utf-8'\\)[:200]\\)\")",
+      "Bash(ls -la \"c:/Users/RHJ/Desktop/coin_m\" 2>/dev/null; echo \"---DOWNLOADS---\"; ls -la \"c:/Users/RHJ/Downloads/realtrade-bot-A-long\" 2>/dev/null)",
+      "Read(//c/Users/RHJ/Downloads/realtrade-bot-A-long/**)",
+      "Bash(python -m pytest -q)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import app.main; print\\('OK', sorted\\(p for p in [r.path for r in app.main.app.routes] if 'hot' in p or 'kimchi' in p\\)\\)\")",
+      "Bash(python -c \"import app.main; print\\('routes:', [r.path for r in app.main.app.routes if 'leaderboard' in r.path]\\)\")",
+      "Bash(python -c \"import app.main; print\\('routes:', sorted\\(r.path for r in app.main.app.routes if 'chat' in r.path or 'edit' in r.path\\)\\)\")",
+      "Bash(git init *)",
+      "Bash(git branch *)"
+    ]
+  }
+}

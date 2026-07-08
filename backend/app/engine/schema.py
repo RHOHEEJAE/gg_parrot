@@ -1,0 +1,293 @@
+"""Normalized macro data model (storage / share / clone contract).
+
+A macro is fully described by this JSON. The backtest engine consumes it as a
+pure input; the API stores it verbatim and serves it by ``share_slug``.
+
+Rule types A/B/C are the original single-position / DCA strategies and are kept
+byte-for-byte compatible. Types D~J are added as a discriminated union keyed on
+``rule_type``: each has its own validated params model (see ``_PARAMS_MODEL``)
+and runs on the shared candle engine (``engine.candles``).
+"""
+from __future__ import annotations
+
+import enum
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class RuleType(str, enum.Enum):
+    A = "A"  # take-profit / stop-loss then re-enter
+    B = "B"  # limit band trading
+    C = "C"  # periodic DCA (long only)
+    D = "D"  # grid trading (multi-order)
+    E = "E"  # trailing stop
+    F = "F"  # RSI threshold trading (indicator)
+    G = "G"  # Bollinger bands (indicator)
+    H = "H"  # martingale / safety orders (multi-order)
+    I = "I"  # volatility breakout (Larry Williams)
+    J = "J"  # moving-average cross (indicator)
+
+
+# Types whose signals are indicator-based -> candle_interval is meaningful and
+# execution must be look-ahead safe (decide on closed bar, fill next open).
+INDICATOR_TYPES = frozenset({RuleType.F, RuleType.G, RuleType.J})
+# Types that place several resting orders at once -> multi_order engine mode.
+MULTI_ORDER_TYPES = frozenset({RuleType.D, RuleType.H})
+# Everything except the three originals runs on the candle engine.
+CANDLE_TYPES = frozenset(
+    {RuleType.D, RuleType.E, RuleType.F, RuleType.G, RuleType.H, RuleType.I, RuleType.J}
+)
+
+
+class PositionSide(str, enum.Enum):
+    LONG = "long"
+    SHORT = "short"
+
+
+class Risk(BaseModel):
+    invest_ratio: float = Field(default=1.0, gt=0, le=1.0)  # fraction of equity per entry
+    stop_loss_pct: Optional[float] = Field(default=None, ge=0)  # e.g. 3.0 == 3%
+    # --- common advanced risk controls (all types; null/0 == disabled) ------
+    daily_max_loss_pct: Optional[float] = Field(default=None, ge=0)  # halt trading for the day
+    max_holding_hours: Optional[float] = Field(default=None, ge=0)  # force-close after N hours
+    cooldown_minutes: float = Field(default=0.0, ge=0)  # block re-entry after a stop-loss
+
+
+class Period(BaseModel):
+    preset: Optional[str] = "1y"  # 1y | 6m | 3m | custom
+    start: Optional[str] = None  # ISO date, used when preset == custom
+    end: Optional[str] = None
+
+
+class Fees(BaseModel):
+    commission_pct: float = Field(default=0.1, ge=0)  # per side, percent
+    slippage_pct: float = Field(default=0.05, ge=0)  # per fill, percent
+    funding_pct: float = Field(default=0.0, ge=0)  # per day for shorts, percent
+
+
+# --- per-type params models (D~J) --------------------------------------
+# These mirror the frontend builder. Each includes ``initial_capital`` so the
+# existing ``Macro.initial_capital`` accessor, slug logic and paper sizing keep
+# working uniformly. Field names follow the v4 spec verbatim.
+class ParamsD(BaseModel):
+    """Grid trading."""
+
+    lower_price: float = Field(gt=0)
+    upper_price: float = Field(gt=0)
+    grid_count: int = Field(ge=2, le=200)
+    grid_mode: Literal["arithmetic", "geometric"] = "arithmetic"
+    per_grid_invest: Optional[float] = Field(default=None, gt=0)
+    band_exit_action: Literal["stop", "hold"] = "stop"
+    rebalance_on_start: bool = True
+    initial_capital: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "ParamsD":
+        if self.upper_price <= self.lower_price:
+            raise ValueError("D: upper_price must be greater than lower_price")
+        return self
+
+
+class ParamsE(BaseModel):
+    """Trailing stop."""
+
+    entry_mode: Literal["immediate", "dip"] = "immediate"
+    entry_dip: float = Field(default=3.0, ge=0)  # percent, used when entry_mode == dip
+    activation_profit: float = Field(default=5.0, ge=0)  # arm the trail after +X%
+    trail_percent: float = Field(gt=0)  # give-back that triggers exit
+    reenter_after_exit: bool = True
+    initial_capital: float = Field(gt=0)
+
+
+class ParamsF(BaseModel):
+    """RSI threshold trading."""
+
+    rsi_period: int = Field(default=14, ge=2, le=200)
+    entry_threshold: float = Field(default=30.0, ge=0, le=100)
+    exit_threshold: float = Field(default=70.0, ge=0, le=100)
+    confirm_candles: int = Field(default=1, ge=1, le=10)
+    exit_mode: Literal["indicator", "take_profit", "both"] = "indicator"
+    take_profit: Optional[float] = Field(default=None, gt=0)
+    initial_capital: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "ParamsF":
+        if self.exit_mode in ("take_profit", "both") and self.take_profit is None:
+            raise ValueError("F: exit_mode take_profit/both requires take_profit")
+        return self
+
+
+class ParamsG(BaseModel):
+    """Bollinger bands."""
+
+    bb_period: int = Field(default=20, ge=2, le=200)
+    bb_std: float = Field(default=2.0, gt=0)
+    strategy: Literal["reversion", "breakout"] = "reversion"
+    exit_target: Literal["mid", "opposite"] = "mid"
+    squeeze_filter: bool = False
+    squeeze_lookback: int = Field(default=50, ge=2, le=500)
+    initial_capital: float = Field(gt=0)
+
+
+class ParamsH(BaseModel):
+    """Martingale / safety orders (DCA-into-loss)."""
+
+    base_order_size: float = Field(gt=0)
+    safety_order_size: float = Field(gt=0)
+    price_deviation: float = Field(gt=0)  # percent step between safety orders
+    safety_order_step_scale: float = Field(default=1.0, gt=0)
+    safety_order_volume_scale: float = Field(default=1.0, gt=0)
+    max_safety_orders: int = Field(default=5, ge=0, le=50)
+    take_profit: float = Field(gt=0)  # percent above average entry
+    initial_capital: float = Field(gt=0)
+
+    def required_funds(self) -> float:
+        """Worst case: base order + every safety order filled."""
+        total = self.base_order_size
+        size = self.safety_order_size
+        for _ in range(self.max_safety_orders):
+            total += size
+            size *= self.safety_order_volume_scale
+        return total
+
+
+class ParamsI(BaseModel):
+    """Volatility breakout (Larry Williams)."""
+
+    k: float = Field(default=0.5, gt=0, le=2.0)
+    exit_mode: Literal["next_open", "trailing", "take_profit"] = "next_open"
+    trail_percent: float = Field(default=2.0, gt=0)
+    take_profit: Optional[float] = Field(default=None, gt=0)
+    ma_filter_period: Optional[int] = Field(default=None, ge=2, le=200)
+    session_start_hour: int = Field(default=9, ge=0, le=23)
+    initial_capital: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "ParamsI":
+        if self.exit_mode == "take_profit" and self.take_profit is None:
+            raise ValueError("I: exit_mode take_profit requires take_profit")
+        return self
+
+
+class ParamsJ(BaseModel):
+    """Moving-average cross."""
+
+    ma_type: Literal["SMA", "EMA"] = "SMA"
+    fast_period: int = Field(ge=1, le=400)
+    slow_period: int = Field(ge=2, le=400)
+    entry_signal: Literal["golden_cross"] = "golden_cross"
+    exit_signal: Literal["dead_cross", "take_profit", "both"] = "dead_cross"
+    take_profit: Optional[float] = Field(default=None, gt=0)
+    confirm_candles: int = Field(default=1, ge=1, le=10)
+    initial_capital: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check(self) -> "ParamsJ":
+        if self.fast_period >= self.slow_period:
+            raise ValueError("J: fast_period must be less than slow_period")
+        if self.exit_signal in ("take_profit", "both") and self.take_profit is None:
+            raise ValueError("J: exit_signal take_profit/both requires take_profit")
+        return self
+
+
+_PARAMS_MODEL: dict[RuleType, type[BaseModel]] = {
+    RuleType.D: ParamsD,
+    RuleType.E: ParamsE,
+    RuleType.F: ParamsF,
+    RuleType.G: ParamsG,
+    RuleType.H: ParamsH,
+    RuleType.I: ParamsI,
+    RuleType.J: ParamsJ,
+}
+
+# Required parameter keys for the original rule types (validated on the raw dict).
+_REQUIRED_PARAMS: dict[RuleType, tuple[str, ...]] = {
+    RuleType.A: ("take_profit_pct", "initial_capital"),
+    RuleType.B: ("buy_price", "sell_price", "initial_capital"),
+    RuleType.C: ("amount_per_buy", "interval_days"),
+}
+
+_VALID_INTERVALS = frozenset({"1m", "5m", "15m", "1h", "4h", "1d"})
+
+
+class Macro(BaseModel):
+    macro_id: Optional[str] = None
+    share_slug: Optional[str] = None
+    symbol: str = "BTCUSDT"
+    rule_type: RuleType
+    position_side: PositionSide = PositionSide.LONG
+    candle_interval: str = "1d"  # A/B/C fill on this bar; F/G/I/J compute indicators on it
+    params: dict = Field(default_factory=dict)
+    risk: Risk = Field(default_factory=Risk)
+    period: Period = Field(default_factory=Period)
+    fees: Fees = Field(default_factory=Fees)
+    created_at: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "Macro":
+        if self.candle_interval not in _VALID_INTERVALS:
+            raise ValueError(f"candle_interval must be one of {sorted(_VALID_INTERVALS)}")
+
+        # Rule C is long only (short DCA is out of scope).
+        if self.rule_type is RuleType.C and self.position_side is not PositionSide.LONG:
+            raise ValueError("rule_type C (DCA) supports long only")
+
+        if self.rule_type in _PARAMS_MODEL:
+            self._validate_new_type()
+        else:
+            self._validate_legacy_type()
+
+        return self
+
+    # --- original A/B/C validation (unchanged behaviour) -----------------
+    def _validate_legacy_type(self) -> None:
+        missing = [k for k in _REQUIRED_PARAMS[self.rule_type] if k not in self.params]
+        if missing:
+            raise ValueError(
+                f"rule_type {self.rule_type.value} requires params: {', '.join(missing)}"
+            )
+        # Short A/B MUST set stop_loss_pct (short loss is theoretically unbounded).
+        if self.position_side is PositionSide.SHORT and self.rule_type in (RuleType.A, RuleType.B):
+            if self.risk.stop_loss_pct is None or self.risk.stop_loss_pct <= 0:
+                raise ValueError("short positions (rule A/B) require risk.stop_loss_pct > 0")
+
+    # --- new D~J validation (typed params + fund pre-check) --------------
+    def _validate_new_type(self) -> None:
+        model_cls = _PARAMS_MODEL[self.rule_type]
+        parsed = model_cls(**self.params)  # raises on bad/missing fields
+        # Normalize the stored dict (apply defaults / coercions) so downstream
+        # readers and storage see a canonical params object.
+        self.params = parsed.model_dump()
+
+        budget = float(self.params["initial_capital"]) * self.risk.invest_ratio
+
+        if self.rule_type is RuleType.H:
+            need = ParamsH(**self.params).required_funds()
+            if need > budget + 1e-9:
+                raise ValueError(
+                    f"H: max safety-order funding {need:,.0f} exceeds budget "
+                    f"{budget:,.0f} (initial_capital × invest_ratio)"
+                )
+        elif self.rule_type is RuleType.D:
+            need = self._grid_required_funds(parsed)  # type: ignore[arg-type]
+            if need > budget + 1e-9:
+                raise ValueError(
+                    f"D: filling every grid needs {need:,.0f} which exceeds budget "
+                    f"{budget:,.0f} (initial_capital × invest_ratio)"
+                )
+
+    @staticmethod
+    def _grid_required_funds(p: "ParamsD") -> float:
+        """Capital to fill every buy grid once (per-grid amount × grid levels)."""
+        per_grid = p.per_grid_invest
+        if per_grid is None:
+            # Even split of the whole budget across grids -> always within budget.
+            return 0.0
+        return per_grid * p.grid_count
+
+    # --- convenience typed accessors -------------------------------------
+    @property
+    def initial_capital(self) -> Optional[float]:
+        v = self.params.get("initial_capital")
+        return float(v) if v is not None else None
