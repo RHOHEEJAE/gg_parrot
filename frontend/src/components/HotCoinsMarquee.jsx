@@ -8,7 +8,7 @@ const POLL_MS = Number(import.meta.env?.VITE_HOTCOINS_POLL_MS) || 45000;
 
 function Item({ coin, onPick, ariaHidden }) {
   const up = coin.change_pct >= 0;
-  const color = up ? "text-green-400" : "text-red-400";
+  const color = up ? "text-green-600" : "text-red-600";
   return (
     <button
       type="button"
@@ -16,13 +16,13 @@ function Item({ coin, onPick, ariaHidden }) {
       tabIndex={ariaHidden ? -1 : 0}
       onClick={() => onPick(coin.symbol)}
       title={`${coin.symbol} 로 매크로 만들기`}
-      className="inline-flex items-center gap-1.5 px-4 py-0.5 hover:bg-slate-800/60 rounded-md transition-colors"
+      className="inline-flex items-center gap-1.5 px-4 py-0.5 hover:bg-slate-100 rounded-md transition-colors"
     >
-      <span className="font-bold text-slate-100">{coin.base}</span>
+      <span className="font-bold text-slate-900">{coin.base}</span>
       <span className={`font-semibold tabular-nums ${color}`}>
         {up ? "▲" : "▼"}{Math.abs(coin.change_pct).toFixed(2)}%
       </span>
-      <span className="text-xs text-slate-400 tabular-nums">${fmtPrice(coin.last_price)}</span>
+      <span className="text-xs text-slate-500 tabular-nums">${fmtPrice(coin.last_price)}</span>
     </button>
   );
 }
@@ -64,9 +64,9 @@ export default function HotCoinsMarquee() {
     coins.map((c) => <Item key={(hidden ? "b-" : "a-") + c.symbol} coin={c} onPick={pick} ariaHidden={hidden} />);
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-800 bg-slate-950/95 backdrop-blur">
+    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
       <div className="flex items-center">
-        <div className="shrink-0 px-3 py-2 text-sm font-bold text-amber-300 border-r border-slate-800 flex items-center gap-1">
+        <div className="shrink-0 px-3 py-2 text-sm font-bold text-amber-700 border-r border-slate-200 flex items-center gap-1">
           🐎 <span className="hidden sm:inline">오늘의 경주마</span>
         </div>
 

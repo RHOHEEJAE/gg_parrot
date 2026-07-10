@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from . import chat as chat_mod
+from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
 from . import kimchi as kimchi_mod
 from . import leaderboard as leaderboard_mod
@@ -176,6 +177,7 @@ def create_macro(macro: Macro) -> dict:
             rep_trades=result.total_trades,
             rep_source=source,
             rep_period_label=period_label,
+            rep_leverage=macro.leverage,
         )
         session.add(row)
         session.commit()
@@ -233,6 +235,17 @@ def kimchi_premium(symbol: str = "BTC") -> dict:
     return kimchi_mod.get_premium(symbol)
 
 
+@app.get("/api/hangang-temp")
+def hangang_temp() -> dict:
+    """'한강 수온' — proxy + server-cache the public Hangang temperature API.
+
+    Fun reference widget (GGparrot tone). Server-cached so the upstream is hit at
+    most once per window regardless of client count; degrades gracefully (stale
+    cache or ok:false) so the page never breaks on an upstream failure.
+    """
+    return hangang_mod.get_temp()
+
+
 @app.get("/api/hot-coins")
 def hot_coins(limit: int = 10) -> dict:
     """'오늘의 경주마' — surging + actively-traded USDT coins (Binance 24h).
@@ -261,6 +274,7 @@ def gallery(limit: int = 50) -> dict:
             "mdd_pct": r.rep_mdd_pct,
             "trades": r.rep_trades,
             "period_label": r.rep_period_label,
+            "leverage": getattr(r, "rep_leverage", 1) or 1,
             "created_at": r.created_at,
         }
         for r in rows
@@ -400,6 +414,7 @@ def card(slug: str) -> Response:
         trades=row.rep_trades,
         share_url=f"{frontend_base}/s/{slug}",
         data_source=row.rep_source,
+        leverage=getattr(row, "rep_leverage", 1) or 1,
     )
     return Response(content=png, media_type="image/png")
 

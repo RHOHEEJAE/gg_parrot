@@ -30,6 +30,7 @@ class MacroRow(SQLModel, table=True):
     rep_trades: int = 0
     rep_source: str = ""
     rep_period_label: str = ""
+    rep_leverage: int = 1  # macro leverage (for the gallery high-risk badge)
 
 
 class PaperSession(SQLModel, table=True):
@@ -45,6 +46,9 @@ class PaperSession(SQLModel, table=True):
     virtual_balance: float = 0.0  # initial capital
     current_equity: float = 0.0
     current_return: float = 0.0
+    # isolated-margin liquidation stats (leverage > 1); 0 for spot macros
+    liquidations: int = 0
+    liquidated_loss: float = 0.0
     macro_json: str = ""
 
 
@@ -102,7 +106,14 @@ def _migrate() -> None:
         "leaderboardentry": {
             "username": "ALTER TABLE leaderboardentry ADD COLUMN username TEXT DEFAULT ''",
             "password_hash": "ALTER TABLE leaderboardentry ADD COLUMN password_hash TEXT DEFAULT ''",
-        }
+        },
+        "papersession": {
+            "liquidations": "ALTER TABLE papersession ADD COLUMN liquidations INTEGER DEFAULT 0",
+            "liquidated_loss": "ALTER TABLE papersession ADD COLUMN liquidated_loss FLOAT DEFAULT 0",
+        },
+        "macrorow": {
+            "rep_leverage": "ALTER TABLE macrorow ADD COLUMN rep_leverage INTEGER DEFAULT 1",
+        },
     }
     with _engine.connect() as conn:
         for table, cols in added.items():

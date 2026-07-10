@@ -63,6 +63,12 @@ def human_summary(macro: Macro) -> str:
             core += f" · -{_num(sl)}% 손절"
         parts = [coin, side_ko, core, f"자금 {ratio_pct}% 투입"]
 
+    # Leverage is a macro condition: surface the multiplier (1x stays hidden so
+    # non-leveraged macros read exactly as before).
+    if macro.leverage and macro.leverage > 1:
+        mode_ko = "격리" if macro.margin_mode == "isolated" else macro.margin_mode
+        parts.append(f"{macro.leverage}배 레버리지({mode_ko})")
+
     return " · ".join(parts)
 
 

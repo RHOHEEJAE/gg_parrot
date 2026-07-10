@@ -40,7 +40,7 @@ export default function InfoTooltip({ term, text, placement = "top" }) {
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="w-4 h-4 rounded-full bg-slate-600 text-[10px] leading-none text-slate-100 flex items-center justify-center hover:bg-blue-500"
+        className="w-4 h-4 rounded-full bg-slate-300 text-[10px] leading-none text-slate-900 flex items-center justify-center hover:bg-blue-500"
       >
         ⓘ
       </button>
@@ -50,8 +50,8 @@ export default function InfoTooltip({ term, text, placement = "top" }) {
           className={
             "absolute left-1/2 -translate-x-1/2 w-56 z-40 " +
             posCls +
-            " rounded-lg bg-slate-950 border border-slate-700 px-3 py-2" +
-            " text-xs leading-relaxed text-slate-200 shadow-xl"
+            " rounded-lg bg-slate-50 border border-slate-300 px-3 py-2" +
+            " text-xs leading-relaxed text-slate-800 shadow-xl"
           }
         >
           {content}

@@ -1,13 +1,26 @@
-import { RULE_TYPES, PERIOD_PRESETS, CANDLE_INTERVALS, withTypeDefaults } from "../lib/macro.js";
+import { RULE_TYPES, PERIOD_PRESETS, CANDLE_INTERVALS, MAX_LEVERAGE, withTypeDefaults } from "../lib/macro.js";
 import InfoTooltip from "./InfoTooltip.jsx";
 import { quoteOf } from "../lib/format.js";
 
 const money = (v, symbol) => `${Number(v || 0).toLocaleString("en-US")} ${quoteOf(symbol)}`;
 
+// Live risk read-out for a chosen leverage. Price move to liquidation ≈ 100/N %.
+function leverageRisk(lev) {
+  const n = Math.max(1, Math.round(Number(lev) || 1));
+  if (n <= 1) return null;
+  const movePct = 100 / n;
+  let level, cls;
+  if (n >= 20) { level = "매우 위험"; cls = "border-red-400 bg-red-50 text-red-800"; }
+  else if (n >= 10) { level = "고위험"; cls = "border-red-300 bg-red-50 text-red-700"; }
+  else if (n >= 4) { level = "주의"; cls = "border-amber-300 bg-amber-50 text-amber-800"; }
+  else { level = "낮음"; cls = "border-amber-200 bg-amber-50 text-amber-700"; }
+  return { n, movePct, level, cls };
+}
+
 function Field({ label, term, children, hint }) {
   return (
     <label className="block">
-      <span className="flex items-center text-sm text-slate-300 mb-1">
+      <span className="flex items-center text-sm text-slate-700 mb-1">
         {label}
         {term && <InfoTooltip term={term} />}
       </span>
@@ -18,7 +31,7 @@ function Field({ label, term, children, hint }) {
 }
 
 const inputCls =
-  "w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-slate-100 " +
+  "w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-slate-900 " +
   "focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 export default function Builder({ form, setForm }) {
@@ -45,7 +58,7 @@ export default function Builder({ form, setForm }) {
     </Field>
   );
   const chk = (k, label, opts = {}) => (
-    <label key={k} className="flex items-center gap-2 text-sm text-slate-300">
+    <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
       <input type="checkbox" checked={!!form[k]} onChange={setChk(k)} />
       {label}
       {opts.term && <InfoTooltip term={opts.term} />}
@@ -111,9 +124,53 @@ export default function Builder({ form, setForm }) {
         </div>
       )}
 
+      {/* leverage — a macro condition (backtest/paper only; C is excluded) */}
+      {rt !== "C" && (() => {
+        const lev = Math.max(1, Math.round(Number(form.leverage) || 1));
+        const risk = leverageRisk(lev);
+        return (
+          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
+            <div className="flex items-center text-sm font-semibold text-slate-500">
+              레버리지 (leverage)
+              <InfoTooltip term="leverage" />
+              <span className="ml-2 text-xs font-normal text-slate-400">격리(isolated) · 백테스트·모의만</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <input
+                type="range" min="1" max={MAX_LEVERAGE} step="1" value={lev}
+                onChange={set("leverage")}
+                className="flex-1 accent-red-500"
+              />
+              <div className="flex items-center gap-1">
+                <input
+                  className={inputCls + " w-20 text-center"}
+                  type="number" min="1" max={MAX_LEVERAGE} step="1" value={form.leverage}
+                  onChange={set("leverage")}
+                />
+                <span className="text-sm text-slate-500">배</span>
+              </div>
+            </div>
+            {risk ? (
+              <div className={"rounded-lg border px-3 py-2 text-sm flex items-start gap-2 " + risk.cls}>
+                <span className="text-base leading-none">⚠️</span>
+                <span>
+                  <b>레버리지 {risk.n}배 · {risk.level}</b> — 가격이 약{" "}
+                  <b>{risk.movePct.toFixed(risk.movePct < 1 ? 2 : 1)}%</b> 반대로 움직이면{" "}
+                  <b>청산(전액 손실)</b>됩니다.
+                  {lev >= 10 && " 초보자에겐 특히 위험해요."}
+                  <InfoTooltip term="liquidation" />
+                </span>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500">1배 = 현물과 동일(청산 없음). 배수를 올리면 수익도 손실도 그만큼 커지고 청산 위험이 생겨요.</div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* rule-specific params */}
-      <div className="rounded-xl border border-slate-800 p-4 space-y-4">
-        <div className="text-sm font-semibold text-slate-400">규칙 파라미터 · {meta.label}</div>
+      <div className="rounded-xl border border-slate-200 p-4 space-y-4">
+        <div className="text-sm font-semibold text-slate-500">규칙 파라미터 · {meta.label}</div>
 
         {rt === "A" && (
           <div className="grid grid-cols-2 gap-4">
@@ -197,7 +254,7 @@ export default function Builder({ form, setForm }) {
             {num("safety_order_volume_scale", "수량 배율 volume_scale")}
             {num("take_profit", "익절률 take_profit (%)", { hint: "평단 기준 익절" })}
             {cap}
-            <div className="col-span-2 text-xs text-amber-400/80">stop_loss는 평단가 기준으로 적용됩니다. 총 소요자금이 (초기자본 × 투입비율)을 넘으면 저장이 반려돼요.</div>
+            <div className="col-span-2 text-xs text-amber-600">stop_loss는 평단가 기준으로 적용됩니다. 총 소요자금이 (초기자본 × 투입비율)을 넘으면 저장이 반려돼요.</div>
           </div>
         )}
 
@@ -228,8 +285,8 @@ export default function Builder({ form, setForm }) {
       </div>
 
       {/* common risk */}
-      <div className="rounded-xl border border-slate-800 p-4 space-y-4">
-        <div className="text-sm font-semibold text-slate-400">공통 리스크 관리</div>
+      <div className="rounded-xl border border-slate-200 p-4 space-y-4">
+        <div className="text-sm font-semibold text-slate-500">공통 리스크 관리</div>
         <div className="grid grid-cols-2 gap-4">
           {num("invest_ratio_pct", "자금 투입 비율 invest_ratio (%)", { term: "invest_ratio", hint: "한 번에 자금의 몇 %를 투입할지" })}
           <Field label="손절률 stop_loss (%)" term="stop_loss" hint={isShort && (rt === "A" || rt === "B") ? "숏은 손절 필수" : "미사용 시 체크 해제"}>
@@ -242,8 +299,8 @@ export default function Builder({ form, setForm }) {
       </div>
 
       {/* advanced common risk */}
-      <details className="rounded-xl border border-slate-800 p-4">
-        <summary className="text-sm font-semibold text-slate-400 cursor-pointer">공통 리스크 관리 (고급)</summary>
+      <details className="rounded-xl border border-slate-200 p-4">
+        <summary className="text-sm font-semibold text-slate-500 cursor-pointer">공통 리스크 관리 (고급)</summary>
         <div className="grid grid-cols-3 gap-4 mt-4">
           <Field label="일일 최대손실 (%)" term="daily_max_loss" hint="도달 시 당일 거래 중단">
             <div className="flex items-center gap-2">
@@ -262,8 +319,8 @@ export default function Builder({ form, setForm }) {
       </details>
 
       {/* fees */}
-      <details className="rounded-xl border border-slate-800 p-4">
-        <summary className="text-sm font-semibold text-slate-400 cursor-pointer">
+      <details className="rounded-xl border border-slate-200 p-4">
+        <summary className="text-sm font-semibold text-slate-500 cursor-pointer">
           수수료 · 슬리피지 · 펀딩비 (고급)
         </summary>
         <div className="grid grid-cols-3 gap-4 mt-4">

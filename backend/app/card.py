@@ -50,6 +50,7 @@ def render_card(
     trades: int,
     share_url: str,
     data_source: str = "",
+    leverage: int = 1,
 ) -> bytes:
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
@@ -57,6 +58,15 @@ def render_card(
     pad = 56
     # --- header: symbol + warning badge ---
     d.text((pad, 44), symbol.upper(), font=_font(56, bold=True), fill=FG)
+
+    # High-risk leverage tag (right-aligned, under the warning badge). Only when
+    # leverage > 1 so spot cards are unchanged.
+    if leverage and leverage > 1:
+        lev_txt = f"고위험 레버리지 {leverage}배 (격리)"
+        lf = _font(24, bold=True)
+        lw = d.textlength(lev_txt, font=lf)
+        d.rounded_rectangle((W - pad - lw - 28, 106, W - pad, 146), radius=12, fill=(69, 10, 10))
+        d.text((W - pad - lw - 14, 110), lev_txt, font=lf, fill=RED)
 
     badge = "과거 시뮬레이션 결과 · 실거래 아님"
     bf = _font(26, bold=True)

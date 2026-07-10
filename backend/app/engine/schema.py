@@ -11,9 +11,15 @@ and runs on the shared candle engine (``engine.candles``).
 from __future__ import annotations
 
 import enum
+import os
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+# Upper bound on macro leverage (demo safety cap). Env-tunable; the builder mirrors
+# this default. Leverage is a backtest/paper-only concept (never applied to real
+# trading), and only directional types use it — C (DCA) is forced to 1.
+MAX_LEVERAGE = int(os.environ.get("MAX_LEVERAGE", "20"))
 
 
 class RuleType(str, enum.Enum):
@@ -218,6 +224,11 @@ class Macro(BaseModel):
     rule_type: RuleType
     position_side: PositionSide = PositionSide.LONG
     candle_interval: str = "1d"  # A/B/C fill on this bar; F/G/I/J compute indicators on it
+    # Leverage is one macro *condition* (backtest/paper only, never real trading).
+    # 1 == spot-equivalent with NO liquidation (byte-for-byte the old behaviour).
+    # Any leverage > 1 turns on the isolated-margin liquidation simulation.
+    leverage: int = Field(default=1, ge=1)
+    margin_mode: Literal["isolated"] = "isolated"  # MVP: isolated only (cross is out of scope)
     params: dict = Field(default_factory=dict)
     risk: Risk = Field(default_factory=Risk)
     period: Period = Field(default_factory=Period)
@@ -232,6 +243,13 @@ class Macro(BaseModel):
         # Rule C is long only (short DCA is out of scope).
         if self.rule_type is RuleType.C and self.position_side is not PositionSide.LONG:
             raise ValueError("rule_type C (DCA) supports long only")
+
+        # Leverage: directional types only, capped by the demo safety limit.
+        # C (DCA) is a keep-buying strategy with no single entry to liquidate.
+        if self.leverage > MAX_LEVERAGE:
+            raise ValueError(f"leverage must be <= {MAX_LEVERAGE}")
+        if self.rule_type is RuleType.C and self.leverage != 1:
+            raise ValueError("rule_type C (DCA) does not support leverage (must be 1)")
 
         if self.rule_type in _PARAMS_MODEL:
             self._validate_new_type()

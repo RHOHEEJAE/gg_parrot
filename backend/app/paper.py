@@ -70,6 +70,8 @@ class _Runner:
         self.status = "running"
         self.recent: List[dict] = []
         self.replay_prices: List[float] = []
+        self.liquidations = 0
+        self.liquidated_loss = 0.0
 
 
 _running: Dict[int, _Runner] = {}
@@ -162,12 +164,16 @@ def _tick(runner: _Runner, price: float) -> None:
     fill = runner.sim.step(price)
     runner.equity = runner.sim.equity(price)
     runner.ret = (runner.equity - runner.initial) / runner.initial * 100.0
+    runner.liquidations = getattr(runner.sim, "liquidations", 0)
+    runner.liquidated_loss = getattr(runner.sim, "liquidated_loss", 0.0)
 
     with get_session() as db:
         row = db.get(PaperSession, runner.session_id)
         if row and row.status == "running":
             row.current_equity = round(runner.equity, 4)
             row.current_return = round(runner.ret, 4)
+            row.liquidations = runner.liquidations
+            row.liquidated_loss = round(runner.liquidated_loss, 4)
             db.add(row)
         if fill:
             trade = PaperTrade(
@@ -243,6 +249,8 @@ def get_status(session_id: int) -> Optional[dict]:
             "current_equity": round(runner.equity, 2),
             "current_return": round(runner.ret, 4),
             "last_price": round(runner.last_price, 4),
+            "liquidations": runner.liquidations,
+            "liquidated_loss": round(runner.liquidated_loss, 2),
             "trades": runner.recent[:30],
         }
 
@@ -265,6 +273,8 @@ def get_status(session_id: int) -> Optional[dict]:
         "current_equity": round(row.current_equity, 2),
         "current_return": round(row.current_return, 4),
         "last_price": 0.0,
+        "liquidations": getattr(row, "liquidations", 0) or 0,
+        "liquidated_loss": round(getattr(row, "liquidated_loss", 0.0) or 0.0, 2),
         "trades": [
             {
                 "id": t.id,

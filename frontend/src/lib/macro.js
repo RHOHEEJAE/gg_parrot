@@ -5,6 +5,10 @@
 // common envelope (candle_interval + advanced risk). Field names match the
 // backend pydantic models exactly so clone (macroToForm) is a direct Object.assign.
 
+// Demo safety cap on leverage (mirrors backend MAX_LEVERAGE default). Leverage is
+// a backtest/paper-only condition — C (DCA) is excluded and forced to 1x.
+export const MAX_LEVERAGE = 20;
+
 export const RULE_TYPES = {
   A: { label: "A · 익절/손절 후 재진입", allowShort: true },
   B: { label: "B · 지정가 밴드 매매", allowShort: true },
@@ -74,6 +78,9 @@ export function defaultForm() {
     rule_type: "A",
     position_side: "long",
     candle_interval: "1d",
+    // leverage (backtest/paper only; 1 == spot, no liquidation)
+    leverage: 1,
+    margin_mode: "isolated",
     // A/B/C params
     take_profit_pct: 5,
     buy_price: 55000,
@@ -114,6 +121,7 @@ export function withTypeDefaults(form, rt) {
   const next = { ...form, rule_type: rt };
   if (TYPE_DEFAULTS[rt]) Object.assign(next, TYPE_DEFAULTS[rt]);
   if (!RULE_TYPES[rt].allowShort) next.position_side = "long";
+  if (rt === "C") next.leverage = 1; // DCA is leverage-excluded (1x fixed)
   return next;
 }
 
@@ -143,6 +151,10 @@ export function validate(form) {
   if (isShort && !meta.allowShort) {
     return `${rt} 타입은 숏을 지원하지 않습니다.`;
   }
+  const lev = num(form.leverage);
+  if (rt === "C" && lev > 1) return "C(DCA) 타입은 레버리지를 지원하지 않습니다(1배 고정).";
+  if (!(lev >= 1) || lev > MAX_LEVERAGE) return `레버리지는 1~${MAX_LEVERAGE}배 사이여야 합니다.`;
+  if (!Number.isInteger(lev)) return "레버리지는 정수 배수여야 합니다.";
   if (rt === "D") {
     if (!(num(form.upper_price) > num(form.lower_price))) return "D: 상단가격이 하단가격보다 커야 합니다.";
     if (form.grid_mode === "geometric" && !(num(form.lower_price) > 0)) return "D: 기하 그리드는 하단가격 > 0 이어야 합니다.";
@@ -237,6 +249,8 @@ export function buildMacro(form) {
     rule_type: rt,
     position_side: rt === "C" || !meta.allowShort ? "long" : form.position_side,
     candle_interval: form.candle_interval || "1d",
+    leverage: rt === "C" ? 1 : Math.max(1, Math.round(num(form.leverage) || 1)),
+    margin_mode: "isolated",
     params: buildParams(rt, form),
     risk: {
       invest_ratio: num(form.invest_ratio_pct) / 100,
@@ -265,6 +279,8 @@ export function macroToForm(macro) {
   f.rule_type = macro.rule_type;
   f.position_side = macro.position_side;
   f.candle_interval = macro.candle_interval ?? "1d";
+  f.leverage = macro.leverage ?? 1;
+  f.margin_mode = macro.margin_mode ?? "isolated";
   Object.assign(f, macro.params); // param keys == form keys
   // null per_grid_invest / take_profit / ma_filter_period -> empty input
   ["per_grid_invest", "take_profit", "ma_filter_period"].forEach((k) => {

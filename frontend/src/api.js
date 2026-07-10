@@ -35,6 +35,9 @@ export const api = {
   // '오늘의 경주마' hot coins (server-cached, shared across clients)
   hotCoins: (limit) => req(`/api/hot-coins?limit=${limit || 10}`),
 
+  // 한강 수온 (server-cached proxy of the public Hangang temperature API)
+  hangangTemp: () => req("/api/hangang-temp"),
+
   // 오늘의 리더보드 (daily KST paper-return board)
   leaderboard: (userId) => req(`/api/leaderboard?user_id=${encodeURIComponent(userId || "")}`),
   leaderboardRegister: (macro, username, password, userId, mode) =>

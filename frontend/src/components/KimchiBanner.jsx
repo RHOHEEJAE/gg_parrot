@@ -42,13 +42,13 @@ export default function KimchiBanner() {
 
   const premium = data?.premium_pct;
   const isKimp = premium != null && premium >= 0;
-  const color = premium == null ? "text-slate-300" : isKimp ? "text-red-400" : "text-blue-400";
+  const color = premium == null ? "text-slate-700" : isKimp ? "text-red-600" : "text-blue-600";
   const label = data?.label || (isKimp ? "김프" : "역프");
 
   return (
-    <div className="border-b border-slate-800 bg-slate-900/60">
+    <div className="border-b border-slate-200 bg-slate-100">
       <div className="max-w-6xl mx-auto px-4 py-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-        <span className="flex items-center font-semibold text-slate-300">
+        <span className="flex items-center font-semibold text-slate-700">
            🌶️김치프리미엄
           <InfoTooltip term="kimchi_premium" placement="bottom" />
         </span>
@@ -56,7 +56,7 @@ export default function KimchiBanner() {
         <select
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
-          className="rounded-md bg-slate-800 border border-slate-700 px-2 py-0.5 text-xs text-slate-200"
+          className="rounded-md bg-slate-100 border border-slate-300 px-2 py-0.5 text-xs text-slate-800"
           aria-label="기준 종목"
         >
           {COINS.map((c) => (
@@ -74,19 +74,19 @@ export default function KimchiBanner() {
         )}
 
         {data?.ok && (
-          <span className="text-slate-400 text-xs hidden sm:inline">
+          <span className="text-slate-500 text-xs hidden sm:inline">
             업비트 {krw(data.upbit_price_krw)} · 바이낸스환산 {krw(data.binance_price_krw)}
-            <span className="text-slate-600"> (${fmtPrice(data.binance_price_usdt)} × {fmtPrice(data.usdkrw)})</span>
+            <span className="text-slate-500"> (${fmtPrice(data.binance_price_usdt)} × {fmtPrice(data.usdkrw)})</span>
           </span>
         )}
 
         {data?.fx_is_fallback && (
-          <span className="text-amber-400 text-xs">환율 조회 실패, 근사값 사용</span>
+          <span className="text-amber-600 text-xs">환율 조회 실패, 근사값 사용</span>
         )}
-        {error && <span className="text-amber-400 text-xs">{error}</span>}
+        {error && <span className="text-amber-600 text-xs">{error}</span>}
 
         {data?.updated_at && (
-          <span className="text-slate-600 text-xs ml-auto hidden md:inline">
+          <span className="text-slate-500 text-xs ml-auto hidden md:inline">
             갱신 {data.updated_at.slice(11, 19)} UTC · 참고용 지표(투자조언 아님)
           </span>
         )}

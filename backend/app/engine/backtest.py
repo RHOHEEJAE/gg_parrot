@@ -9,7 +9,10 @@ Execution assumptions (also documented in README):
     (adjusted for slippage). Intrabar high/low is not used to trigger TP/SL.
   * Commission is charged per side; slippage worsens each fill; funding
     (shorts only, default 0) accrues per held day on notional.
-  * Leverage is fixed at 1x, so there is no liquidation.
+  * Leverage (``macro.leverage``, default 1) uses an isolated-margin model: the
+    position controls margin×leverage of notional and is force-closed at an
+    approximate liquidation price (see ``engine.leverage``). At leverage 1 there
+    is no liquidation and behaviour is identical to the original spot engine.
   * Short PnL is sign-reversed: price down = profit, price up = loss.
 """
 from __future__ import annotations
@@ -40,6 +43,11 @@ class BacktestResult(BaseModel):
     # bars where a take-profit and stop-loss both triggered in one candle
     # (stop taken, conservative). 0 for the legacy A/B/C engines.
     same_bar_sl_bars: int = 0
+    # leverage (isolated) liquidation summary: how many times the position was
+    # force-closed at the liquidation price, and the total money wiped. Both 0
+    # when leverage == 1 (no liquidation).
+    liquidation_count: int = 0
+    liquidated_loss: float = 0.0
 
 
 # Fill-price / execution logic lives in stepper.py (shared with paper trading).
@@ -53,6 +61,8 @@ def _metrics(
     *,
     win_rate_override: Optional[float] = None,
     same_bar_sl_bars: int = 0,
+    liquidation_count: int = 0,
+    liquidated_loss: float = 0.0,
 ) -> BacktestResult:
     final_equity = equity_curve[-1].equity if equity_curve else initial_capital
     final_return_pct = (final_equity - initial_capital) / initial_capital * 100.0
@@ -86,6 +96,8 @@ def _metrics(
         final_equity=round(final_equity, 2),
         equity_curve=equity_curve,
         same_bar_sl_bars=same_bar_sl_bars,
+        liquidation_count=liquidation_count,
+        liquidated_loss=round(liquidated_loss, 2),
     )
 
 
@@ -106,7 +118,14 @@ def _run_single_position(macro: Macro, df: pd.DataFrame) -> BacktestResult:
         sim.step(c)
         equity_curve.append(EquityPoint(t=_iso(times[i]), equity=round(sim.equity(c), 4)))
 
-    return _metrics(equity_curve, sim.closed_trades, len(sim.closed_trades), sim.initial_capital)
+    return _metrics(
+        equity_curve,
+        sim.closed_trades,
+        len(sim.closed_trades),
+        sim.initial_capital,
+        liquidation_count=sim.liquidations,
+        liquidated_loss=sim.liquidated_loss,
+    )
 
 
 # --- Rule C: periodic DCA (long only) -----------------------------------
@@ -172,6 +191,8 @@ def _run_candle_engine(macro: Macro, df: pd.DataFrame) -> BacktestResult:
         len(sim.closed_trades),
         sim.initial_capital,
         same_bar_sl_bars=sim.same_bar_sl,
+        liquidation_count=sim.liquidations,
+        liquidated_loss=sim.liquidated_loss,
     )
 
 

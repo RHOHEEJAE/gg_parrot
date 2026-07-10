@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Deque, List, Optional
 
+from .leverage import liquidation_price
 from .schema import Macro, PositionSide, RuleType
 from .stepper import Fill, buy_fill, sell_fill
 
@@ -115,6 +116,7 @@ class MAState:
 class _Lot:
     qty: float
     fill: float  # entry fill price (already slippage-adjusted)
+    margin: float  # equity committed to this lot (notional / leverage; == notional at 1x)
 
 
 class CandleSim:
@@ -135,6 +137,7 @@ class CandleSim:
         self.daily_max_loss = macro.risk.daily_max_loss_pct
         self.max_holding_hours = macro.risk.max_holding_hours
         self.cooldown_minutes = macro.risk.cooldown_minutes
+        self.leverage = int(macro.leverage or 1)  # 1 == spot, no liquidation
         self.p = dict(macro.params)
 
         self.initial_capital = float(
@@ -144,6 +147,9 @@ class CandleSim:
         self.lots: List[_Lot] = []
         self.closed_trades: List[float] = []
         self.same_bar_sl = 0
+        # Isolated-margin liquidation stats (leverage > 1).
+        self.liquidations = 0
+        self.liquidated_loss = 0.0
 
         # common-risk state
         self._day: Optional[str] = None
@@ -173,7 +179,11 @@ class CandleSim:
                 return self.cash
             lot = self.lots[0]
             return self.cash + lot.qty * (lot.fill - price)
-        return self.cash + self.total_qty() * price
+        # long book: free cash + committed margin + unrealized PnL.
+        # At leverage 1 (margin == qty*fill) this equals cash + total_qty*price.
+        margin = sum(l.margin for l in self.lots)
+        unreal = sum(l.qty * (price - l.fill) for l in self.lots)
+        return self.cash + margin + unreal
 
     def _fill(self, side: str, price: float, qty: float, mark: float) -> Fill:
         eq = self.equity(mark)
@@ -181,26 +191,31 @@ class CandleSim:
         return Fill(side=side, price=price, qty=qty, equity_after=eq, return_pct=ret)
 
     # -- long open / short open / close ----------------------------------
-    def _open_long(self, notional: float, close: float, ts: datetime, mark: float) -> Optional[Fill]:
-        notional = min(notional, self.cash)
-        if notional <= 1e-9:
+    # ``margin`` is the equity the caller commits; the position controls
+    # ``margin × leverage`` of notional. At leverage 1 the two are equal, so the
+    # cash math below is byte-for-byte the old spot behaviour.
+    def _open_long(self, margin: float, close: float, ts: datetime, mark: float) -> Optional[Fill]:
+        margin = min(margin, self.cash)
+        if margin <= 1e-9:
             return None
+        notional = margin * self.leverage
         f = buy_fill(close, self.slip)
         qty = notional / f
-        self.cash -= notional + notional * self.comm / 100.0
-        self.lots.append(_Lot(qty=qty, fill=f))
+        self.cash -= margin + notional * self.comm / 100.0
+        self.lots.append(_Lot(qty=qty, fill=f, margin=margin))
         if self._entry_time is None:
             self._entry_time = ts
         return self._fill("buy", f, qty, mark)
 
     def _open_short(self, close: float, ts: datetime, mark: float) -> Optional[Fill]:
-        notional = self.invest_ratio * self.cash
-        if notional <= 1e-9:
+        margin = self.invest_ratio * self.cash
+        if margin <= 1e-9:
             return None
+        notional = margin * self.leverage
         f = sell_fill(close, self.slip)
         qty = notional / f
         self.cash -= notional * self.comm / 100.0
-        self.lots.append(_Lot(qty=qty, fill=f))
+        self.lots.append(_Lot(qty=qty, fill=f, margin=margin))
         self._entry_time = ts
         return self._fill("short", f, qty, mark)
 
@@ -209,6 +224,7 @@ class CandleSim:
             return None
         qty = self.total_qty()
         avg = self.avg_entry()
+        margin = sum(l.margin for l in self.lots)
         if self.side is PositionSide.SHORT:
             f = buy_fill(close, self.slip)  # cover
             exit_comm = qty * f * self.comm / 100.0
@@ -218,7 +234,8 @@ class CandleSim:
         else:
             f = sell_fill(close, self.slip)
             exit_comm = qty * f * self.comm / 100.0
-            self.cash += qty * f - exit_comm
+            # return committed margin + realized PnL (== qty*f at leverage 1)
+            self.cash += margin + qty * (f - avg) - exit_comm
             pnl = qty * (f - avg) - exit_comm
             side = "sell"
         self.closed_trades.append(pnl)
@@ -227,6 +244,30 @@ class CandleSim:
         if is_stop and self.cooldown_minutes > 0:
             self._cooldown_until = ts + timedelta(minutes=self.cooldown_minutes)
         return self._fill(side, f, qty, mark)
+
+    def _liquidate_all(self, px: float, mark: float, ts: datetime) -> Optional[Fill]:
+        """Isolated liquidation: the whole committed margin is lost (전액 손실).
+
+        Long lots removed their margin from cash at entry, so equity already floors
+        at cash; short kept its margin in cash, so wipe it here. Loss is capped at
+        the committed margin."""
+        if not self.in_position():
+            return None
+        qty = self.total_qty()
+        margin = sum(l.margin for l in self.lots)
+        if self.side is PositionSide.SHORT:
+            self.cash -= margin
+            side = "cover"
+        else:
+            side = "sell"
+        self.closed_trades.append(-margin)
+        self.liquidations += 1
+        self.liquidated_loss += margin
+        self.lots.clear()
+        self._entry_time = None
+        if self.cooldown_minutes > 0:
+            self._cooldown_until = ts + timedelta(minutes=self.cooldown_minutes)
+        return self._fill(side, px, qty, mark)
 
     # -- common risk ------------------------------------------------------
     def _entry_blocked(self, ts: datetime) -> bool:
@@ -249,6 +290,20 @@ class CandleSim:
                 self._halted_day = None
 
         forced = False
+
+        # Isolated-margin liquidation (leverage > 1) — checked FIRST, before the
+        # user stop-loss / take-profit, so a bar that touches both liquidates
+        # (conservative). Uses the quantity-weighted average entry.
+        if self.leverage > 1 and self.in_position():
+            avg = self.avg_entry()
+            liq = liquidation_price(avg, self.leverage, self.side, commission_pct=self.comm)
+            if liq is not None:
+                hit = h >= liq if self.side is PositionSide.SHORT else l <= liq
+                if hit:
+                    f = self._liquidate_all(liq, liq, ts)
+                    if f:
+                        fills.append(f)
+                        return True
 
         # Shared stop-loss (average-entry based). Checked before profit exits.
         if self.sl and self.in_position():
@@ -406,20 +461,23 @@ class GridSim(CandleSim):
                 lot = self.holdings.pop(i)
                 f = sell_fill(sell_level, self.slip)
                 exit_comm = lot.qty * f * self.comm / 100.0
-                self.cash += lot.qty * f - exit_comm
+                # return this grid lot's margin + realized PnL (== qty*f at leverage 1)
+                self.cash += lot.margin + lot.qty * (f - lot.fill) - exit_comm
                 self.closed_trades.append(lot.qty * (f - lot.fill) - exit_comm)
                 self._remove_lot(lot)
                 fills.append(self._fill("sell", f, lot.qty, c))
-        # Buys: any buy level reached by low that we don't already hold.
+        # Buys: any buy level reached by low that we don't already hold. ``per_grid``
+        # is the committed margin; the lot controls ``per_grid × leverage`` notional.
         for i in range(len(self.levels) - 1):
             if i in self.holdings:
                 continue
             buy_level = self.levels[i]
             if l <= buy_level <= self.upper and self.cash >= self.per_grid:
+                notional = self.per_grid * self.leverage
                 f = buy_fill(buy_level, self.slip)
-                qty = self.per_grid / f
-                self.cash -= self.per_grid + self.per_grid * self.comm / 100.0
-                lot = _Lot(qty=qty, fill=f)
+                qty = notional / f
+                self.cash -= self.per_grid + notional * self.comm / 100.0
+                lot = _Lot(qty=qty, fill=f, margin=self.per_grid)
                 self.holdings[i] = lot
                 self.lots.append(lot)
                 if self._entry_time is None:
@@ -787,3 +845,11 @@ class CandleAggregatorSim:
     @property
     def initial_capital(self) -> float:
         return self.inner.initial_capital
+
+    @property
+    def liquidations(self) -> int:
+        return self.inner.liquidations
+
+    @property
+    def liquidated_loss(self) -> float:
+        return self.inner.liquidated_loss

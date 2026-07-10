@@ -20,6 +20,7 @@ export default function Studio() {
   const [error, setError] = useState("");
   const [share, setShare] = useState(null); // { slug, url }
   const [loadedFrom, setLoadedFrom] = useState("");
+  const [runLeverage, setRunLeverage] = useState(1); // leverage of the last run (for badges)
 
   // Clone flow: load a shared macro into the builder.
   useEffect(() => {
@@ -71,6 +72,7 @@ export default function Studio() {
       setSummary(data.human_summary);
       setDataSource(data.data_source);
       setPeriodLabel(data.period_label);
+      setRunLeverage(macro.leverage || 1);
     } catch (e) {
       setError(String(e.message || e));
     } finally {
@@ -88,6 +90,7 @@ export default function Studio() {
       setResult(data.result);
       setSummary(data.human_summary);
       setDataSource(data.data_source);
+      setRunLeverage(macro.leverage || 1);
       setShare({ slug: data.share_slug, url: `${window.location.origin}/s/${data.share_slug}` });
     } catch (e) {
       setError(String(e.message || e));
@@ -101,27 +104,27 @@ export default function Studio() {
       <section>
         <h2 className="text-lg font-semibold mb-4">매크로 빌더</h2>
         {loadedFrom && (
-          <div className="mb-4 rounded-lg bg-blue-950/40 border border-blue-800/50 px-4 py-3 text-sm text-blue-200">
+          <div className="mb-4 rounded-lg bg-blue-50 border border-blue-300 px-4 py-3 text-sm text-blue-800">
             복제한 매크로: {loadedFrom}
           </div>
         )}
         <Builder form={form} setForm={setForm} />
 
-        {valErr && <div className="mt-4 text-sm text-amber-300">{valErr}</div>}
-        {error && <div className="mt-4 text-sm text-red-400">오류: {error}</div>}
+        {valErr && <div className="mt-4 text-sm text-amber-700">{valErr}</div>}
+        {error && <div className="mt-4 text-sm text-red-600">오류: {error}</div>}
 
         <div className="mt-6 flex gap-3">
           <button
             onClick={runBacktest}
             disabled={busy || !!valErr}
-            className="rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-5 py-2.5 font-semibold"
+            className="rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-5 py-2.5 font-semibold text-white"
           >
             {busy ? "실행 중…" : "백테스트 실행"}
           </button>
           <button
             onClick={saveAndShare}
             disabled={busy || !!valErr}
-            className="rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-40 px-5 py-2.5 font-semibold"
+            className="rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40 px-5 py-2.5 font-semibold"
           >
             저장 & 공유 링크 생성
           </button>
@@ -134,14 +137,14 @@ export default function Studio() {
         </div>
 
         {!result && !busy && (
-          <div className="rounded-xl border border-dashed border-slate-800 p-10 text-center text-slate-500">
+          <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
             <SimBadge className="mb-4" />
             <div>백테스트를 실행하면 결과가 여기에 표시됩니다.</div>
           </div>
         )}
 
         {result && (
-          <ResultView result={result} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} />
+          <ResultView result={result} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} leverage={runLeverage} />
         )}
 
         {result && (
@@ -151,13 +154,13 @@ export default function Studio() {
         )}
 
         {share && (
-          <div className="mt-6 rounded-2xl bg-slate-900 border border-slate-800 p-5 space-y-4">
-            <div className="text-sm font-semibold text-slate-300">공유 & 인증 카드</div>
+          <div className="mt-6 rounded-2xl bg-white border border-slate-200 p-5 space-y-4">
+            <div className="text-sm font-semibold text-slate-700">공유 & 인증 카드</div>
             <div className="flex gap-2">
-              <input readOnly value={share.url} className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm" />
+              <input readOnly value={share.url} className="flex-1 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm" />
               <button
                 onClick={() => navigator.clipboard?.writeText(share.url)}
-                className="rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm"
+                className="rounded-lg bg-slate-200 hover:bg-slate-300 px-3 py-2 text-sm"
               >
                 복사
               </button>
@@ -165,12 +168,12 @@ export default function Studio() {
             <img
               src={api.cardUrl(share.slug)}
               alt="공유 카드"
-              className="w-full rounded-xl border border-slate-800"
+              className="w-full rounded-xl border border-slate-200"
             />
             <a
               href={api.cardUrl(share.slug)}
               download={`${share.slug}.png`}
-              className="inline-block text-sm text-blue-400 hover:underline"
+              className="inline-block text-sm text-blue-600 hover:underline"
             >
               카드 이미지 다운로드
             </a>

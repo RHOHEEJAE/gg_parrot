@@ -13,7 +13,23 @@
       "Bash(python -c \"import app.main; print\\('routes:', [r.path for r in app.main.app.routes if 'leaderboard' in r.path]\\)\")",
       "Bash(python -c \"import app.main; print\\('routes:', sorted\\(r.path for r in app.main.app.routes if 'chat' in r.path or 'edit' in r.path\\)\\)\")",
       "Bash(git init *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(git ls-remote *)",
+      "Bash(git merge *)",
+      "Bash(git checkout *)",
+      "Bash(ls -la \"c:/Users/RHJ/Downloads/realtrade-bot-A-long/\" 2>/dev/null)",
+      "Bash(python -m pytest -q tests/test_v6.py)",
+      "Bash(ls -la \"c:/Users/RHJ/Downloads/\" 2>/dev/null | grep -i \"realtrade\\\\|bot\" ; echo \"---\"; find \"c:/Users/RHJ/Downloads\" -maxdepth 2 -name \"bot.py\" 2>/dev/null)",
+      "Read(//c/Users/RHJ/Downloads/**)",
+      "Bash(python -m pytest tests/test_leverage.py -q)",
+      "Bash(npm run *)",
+      "PowerShell($n = Get-Command node -ErrorAction SilentlyContinue; if \\($n\\) { Write-Output $n.Source } else { Write-Output \"no-node\" }; Get-ChildItem \"C:\\\\Program Files\\\\nodejs\" -ErrorAction SilentlyContinue | Select-Object -First 5 Name)",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; cd C:\\\\Users\\\\RHJ\\\\Desktop\\\\coin_m\\\\frontend; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Program Files\\\\nodejs\\\\node_modules\\\\npm\\\\bin\\\\npm-cli.js\" run build 2>&1 | Select-Object -Last 25)",
+      "Bash(python -m pytest tests/test_hangang.py -q)",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;\" + $env:Path; cd C:\\\\Users\\\\RHJ\\\\Desktop\\\\coin_m\\\\frontend; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"C:\\\\Program Files\\\\nodejs\\\\node_modules\\\\npm\\\\bin\\\\npm-cli.js\" run build 2>&1 | Select-Object -Last 12)"
     ]
   }
 }

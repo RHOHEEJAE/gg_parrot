@@ -12,7 +12,7 @@ const fmtCountdown = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 
 function ret(e) {
   if (e.return_pct == null) return { text: "집계중…", cls: "text-slate-500" };
   const up = e.return_pct >= 0;
-  return { text: `${up ? "+" : ""}${e.return_pct.toFixed(2)}%`, cls: up ? "text-green-400" : "text-red-400" };
+  return { text: `${up ? "+" : ""}${e.return_pct.toFixed(2)}%`, cls: up ? "text-green-600" : "text-red-600" };
 }
 
 export default function Leaderboard() {
@@ -71,15 +71,15 @@ export default function Leaderboard() {
       </div>
 
       {/* countdown + register */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-slate-900 border border-slate-800 px-5 py-4">
-        <div className="text-sm text-slate-300">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-white border border-slate-200 px-5 py-4">
+        <div className="text-sm text-slate-700">
           리더보드 초기화까지{" "}
-          <span className="font-bold tabular-nums text-amber-300">{fmtCountdown(remain)}</span>{" "}
+          <span className="font-bold tabular-nums text-amber-700">{fmtCountdown(remain)}</span>{" "}
           <span className="text-slate-500">남음 (매일 KST 00:00 초기화)</span>
         </div>
         <button
           onClick={() => setModal({})}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold"
+          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white"
         >
           + 나만의 매크로 등록
         </button>
@@ -90,9 +90,9 @@ export default function Leaderboard() {
       </p>
 
       {busy && <div className="text-slate-500">불러오는 중…</div>}
-      {error && <div className="text-red-400">오류: {error}</div>}
+      {error && <div className="text-red-600">오류: {error}</div>}
       {!busy && items.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-800 p-10 text-center text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
           아직 등록된 매크로가 없습니다. <b>+ 나만의 매크로 등록</b>으로 첫 주자가 되어보세요.
         </div>
       )}
@@ -101,15 +101,20 @@ export default function Leaderboard() {
         {items.map((e, idx) => {
           const r = ret(e);
           return (
-            <div key={e.id} className="rounded-2xl bg-slate-900 border border-slate-800 p-4 flex items-center gap-4 flex-wrap">
+            <div key={e.id} className="rounded-2xl bg-white border border-slate-200 p-4 flex items-center gap-4 flex-wrap">
               <div className="w-8 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-100 truncate">{e.username || e.nickname}</span>
-                  {e.is_mine && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">나</span>}
+                  <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
+                  {e.is_mine && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">나</span>}
+                  {e.macro?.leverage > 1 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 font-bold" title="고위험 레버리지 전략">
+                      ⚠️ {e.macro.leverage}배
+                    </span>
+                  )}
                   <span className="text-xs text-slate-500">· 오늘 {e.created_kst} 등록</span>
                 </div>
-                <div className="text-sm text-slate-300 truncate">{e.human_summary}</div>
+                <div className="text-sm text-slate-700 truncate">{e.human_summary}</div>
               </div>
 
               <div className={"w-24 text-right text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
@@ -117,28 +122,28 @@ export default function Leaderboard() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => vote(e.id, 1)}
-                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === 1 ? "bg-green-600 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-300")}
+                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === 1 ? "bg-green-600 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
                   title="좋아요"
                 >
                   👍 {e.likes}
                 </button>
                 <button
                   onClick={() => vote(e.id, -1)}
-                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === -1 ? "bg-red-600 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-300")}
+                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === -1 ? "bg-red-600 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
                   title="싫어요"
                 >
                   👎 {e.dislikes}
                 </button>
                 <button
                   onClick={() => copyToBuilder(e)}
-                  className="px-2 py-1 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
                   title="이 매크로를 빌더로 복사"
                 >
                   📋 복사
                 </button>
                 <button
                   onClick={() => setModal({ edit: e })}
-                  className="px-2 py-1 rounded-lg text-sm bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
                   title="비밀번호 확인 후 수정"
                 >
                   ✏ 수정

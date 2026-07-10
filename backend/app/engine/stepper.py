@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
+from .leverage import liquidation_price
 from .schema import Macro, PositionSide, RuleType
 
 
@@ -46,6 +47,7 @@ class PositionSim:
         self.funding = macro.fees.funding_pct
         self.invest_ratio = macro.risk.invest_ratio
         self.sl = macro.risk.stop_loss_pct  # may be None
+        self.leverage = int(macro.leverage or 1)  # 1 == spot, no liquidation
 
         p = macro.params
         if self.rule_type is RuleType.A:
@@ -64,7 +66,12 @@ class PositionSim:
         self.qty = 0.0
         self.entry_fill = 0.0
         self.entry_commission = 0.0
+        self.margin = 0.0  # equity committed to the open position (leverage bookkeeping)
+        self.liq_price: Optional[float] = None  # isolated liquidation price (leverage > 1)
         self.closed_trades: List[float] = []
+        # Liquidation stats surfaced to the result / paper status.
+        self.liquidations = 0
+        self.liquidated_loss = 0.0
 
     # -- exit / entry conditions (identical to the backtest semantics) --
     def _should_exit(self, c: float) -> bool:
@@ -99,6 +106,60 @@ class PositionSim:
             return c <= self.buy_price
         return c >= self.sell_price  # B short
 
+    def _liquidated(self, c: float) -> bool:
+        """True if this close breaches the isolated liquidation price."""
+        if self.liq_price is None:
+            return False
+        if self.side is PositionSide.LONG:
+            return c <= self.liq_price
+        return c >= self.liq_price
+
+    def _do_close(self, exec_price: float, mark: float) -> Fill:
+        """Close the position at ``exec_price``.
+
+        Returns the margin plus realized PnL to cash. With leverage the entry only
+        locked ``margin`` (not the full notional), so the margin is added back here;
+        at leverage 1 ``margin == notional`` and this reduces to the old spot math.
+        """
+        traded_qty = self.qty
+        if self.side is PositionSide.LONG:
+            f = sell_fill(exec_price, self.slip)
+            exit_comm = self.qty * f * self.comm / 100.0
+            self.cash += self.margin + self.qty * (f - self.entry_fill) - exit_comm
+            pnl = self.qty * (f - self.entry_fill) - self.entry_commission - exit_comm
+            side = "sell"
+        else:
+            f = buy_fill(exec_price, self.slip)  # cover
+            exit_comm = self.qty * f * self.comm / 100.0
+            self.cash += self.qty * (self.entry_fill - f) - exit_comm
+            pnl = self.qty * (self.entry_fill - f) - self.entry_commission - exit_comm
+            side = "cover"
+        self.closed_trades.append(pnl)
+        self.in_pos = False
+        self.qty = 0.0
+        self.margin = 0.0
+        self.liq_price = None
+        return self._fill(side, f, traded_qty, mark)
+
+    def _liquidate(self, mark: float) -> Fill:
+        """Force-close a leveraged position: the whole committed margin is lost
+        (isolated). The loss is capped at the margin — cash cannot go past it."""
+        traded_qty = self.qty
+        px = self.liq_price if self.liq_price is not None else self.entry_fill
+        # Long removed the margin from cash at entry (so cash already floors the
+        # loss); short kept it, so wipe it now. Either way equity == remaining cash.
+        if self.side is PositionSide.SHORT:
+            self.cash -= self.margin
+        side = "sell" if self.side is PositionSide.LONG else "cover"
+        self.closed_trades.append(-self.margin)
+        self.liquidations += 1
+        self.liquidated_loss += self.margin
+        self.in_pos = False
+        self.qty = 0.0
+        self.margin = 0.0
+        self.liq_price = None
+        return self._fill(side, px, traded_qty, mark)
+
     def step(self, price: float) -> Optional[Fill]:
         c = price
         # Funding accrues while holding a short.
@@ -107,32 +168,21 @@ class PositionSim:
 
         fill: Optional[Fill] = None
         if self.in_pos:
-            if self._should_exit(c):
-                traded_qty = self.qty
-                if self.side is PositionSide.LONG:
-                    f = sell_fill(c, self.slip)
-                    exit_comm = self.qty * f * self.comm / 100.0
-                    self.cash += self.qty * f - exit_comm
-                    pnl = (self.qty * f - exit_comm) - (self.qty * self.entry_fill + self.entry_commission)
-                    side = "sell"
-                else:
-                    f = buy_fill(c, self.slip)  # cover
-                    exit_comm = self.qty * f * self.comm / 100.0
-                    self.cash += self.qty * (self.entry_fill - f) - exit_comm
-                    pnl = self.qty * (self.entry_fill - f) - self.entry_commission - exit_comm
-                    side = "cover"
-                self.closed_trades.append(pnl)
-                self.in_pos = False
-                self.qty = 0.0
-                fill = self._fill(side, f, traded_qty, c)
+            # Liquidation is checked first (conservative): a leveraged position that
+            # breaches its liq price is force-closed, wiping the committed margin.
+            if self._liquidated(c):
+                fill = self._liquidate(c)
+            elif self._should_exit(c):
+                fill = self._do_close(c, c)
         else:
             if self._should_enter(c):
-                notional = self.invest_ratio * self.cash  # cash == equity when flat
+                margin = self.invest_ratio * self.cash  # cash == equity when flat
+                notional = margin * self.leverage
                 if self.side is PositionSide.LONG:
                     f = buy_fill(c, self.slip)
                     self.qty = notional / f
                     self.entry_commission = notional * self.comm / 100.0
-                    self.cash -= notional + self.entry_commission
+                    self.cash -= margin + self.entry_commission
                     side = "buy"
                 else:
                     f = sell_fill(c, self.slip)
@@ -141,6 +191,10 @@ class PositionSim:
                     self.cash -= self.entry_commission
                     side = "short"
                 self.entry_fill = f
+                self.margin = margin
+                self.liq_price = liquidation_price(
+                    f, self.leverage, self.side, commission_pct=self.comm
+                )
                 self.in_pos = True
                 fill = self._fill(side, f, self.qty, c)
         return fill
@@ -149,7 +203,8 @@ class PositionSim:
         if not self.in_pos:
             return self.cash
         if self.side is PositionSide.LONG:
-            return self.cash + self.qty * price
+            # free cash + locked margin + unrealized PnL (== cash + qty*price at 1x)
+            return self.cash + self.margin + self.qty * (price - self.entry_fill)
         return self.cash + self.qty * (self.entry_fill - price)
 
     def _fill(self, side: str, price: float, qty: float, mark: float) -> Fill:
@@ -187,6 +242,9 @@ class DcaSim:
         self.stopped = False
         self.buys_done = 0
         self._step = 0
+        # DCA (rule C) never uses leverage; expose the fields for a uniform interface.
+        self.liquidations = 0
+        self.liquidated_loss = 0.0
 
     def step(self, price: float) -> Optional[Fill]:
         c = price
