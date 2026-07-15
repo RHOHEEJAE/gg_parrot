@@ -18,7 +18,10 @@ from typing import Optional
 import httpx
 
 _UPBIT = "https://api.upbit.com/v1/ticker"
-_BINANCE = "https://api.binance.com/api/v3/ticker/price"
+# Env-configurable base so a US-hosted deploy can use data-api.binance.vision
+# (api.binance.com is geo-blocked from US IPs). Same public data either way.
+_BINANCE_BASE = os.environ.get("BINANCE_API_BASE", "https://api.binance.com").rstrip("/")
+_BINANCE = f"{_BINANCE_BASE}/api/v3/ticker/price"
 _FX = "https://open.er-api.com/v6/latest/USD"  # free, no key; rates.KRW
 
 # Supported reference coins -> (upbit market, binance symbol).

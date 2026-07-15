@@ -18,8 +18,12 @@ from typing import Optional
 import httpx
 import pandas as pd
 
-_BASE = "https://api.binance.com/api/v3/klines"
-_TICKER = "https://api.binance.com/api/v3/ticker/price"
+# Base host is env-configurable so a US-hosted deploy (where api.binance.com is
+# geo-blocked) can point at the public data mirror (data-api.binance.vision),
+# which serves identical public market data. Defaults to the main host locally.
+_BINANCE_BASE = os.environ.get("BINANCE_API_BASE", "https://api.binance.com").rstrip("/")
+_BASE = f"{_BINANCE_BASE}/api/v3/klines"
+_TICKER = f"{_BINANCE_BASE}/api/v3/ticker/price"
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cache")
 _DB_PATH = os.path.join(_CACHE_DIR, "market.db")
 _MS_DAY = 86_400_000

@@ -13,3 +13,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
+      # api.binance.com 은 미국 IP를 차단 → Render(미국 리전)에선 공개 데이터
+      # 미러 호스트를 사용(동일한 공개 시세). 로컬은 이 변수 없이 기본 호스트 사용.
+      - key: BINANCE_API_BASE
+        value: "https://data-api.binance.vision"

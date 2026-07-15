@@ -19,7 +19,10 @@ from typing import Optional
 
 import httpx
 
-_TICKER_24H = "https://api.binance.com/api/v3/ticker/24hr"
+# Env-configurable base so a US-hosted deploy can use data-api.binance.vision
+# (api.binance.com is geo-blocked from US IPs). Same public data either way.
+_BINANCE_BASE = os.environ.get("BINANCE_API_BASE", "https://api.binance.com").rstrip("/")
+_TICKER_24H = f"{_BINANCE_BASE}/api/v3/ticker/24hr"
 
 # Tunables (env-configurable).
 MIN_QUOTE_VOLUME = float(os.environ.get("HOTCOINS_MIN_QUOTE_VOLUME", "10000000"))  # 10M USDT
