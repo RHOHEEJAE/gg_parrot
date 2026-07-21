@@ -8,6 +8,7 @@ logic — only the data source differs. This is the single source of truth for
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from .leverage import liquidation_price
@@ -47,6 +48,13 @@ class PositionSim:
         self.funding = macro.fees.funding_pct
         self.invest_ratio = macro.risk.invest_ratio
         self.sl = macro.risk.stop_loss_pct  # may be None
+        # Time-based common risk (same semantics as engine.candles). These only
+        # act when a timestamp is supplied to ``step`` (backtest candle time /
+        # paper wall-clock); with ts=None they stay inert so the legacy
+        # price-only contract is unchanged.
+        self.daily_max_loss = macro.risk.daily_max_loss_pct
+        self.max_holding_hours = macro.risk.max_holding_hours
+        self.cooldown_minutes = macro.risk.cooldown_minutes
         self.leverage = int(macro.leverage or 1)  # 1 == spot, no liquidation
 
         p = macro.params
@@ -73,31 +81,32 @@ class PositionSim:
         self.liquidations = 0
         self.liquidated_loss = 0.0
 
+        # Time-based common-risk state (mirrors engine.candles.CandleSim).
+        self._day: Optional[str] = None
+        self._day_start_equity = self.initial_capital
+        self._halted_day: Optional[str] = None
+        self._cooldown_until: Optional[datetime] = None
+        self._entry_time: Optional[datetime] = None
+
     # -- exit / entry conditions (identical to the backtest semantics) --
-    def _should_exit(self, c: float) -> bool:
+    # Split into stop vs. profit so a stop-loss exit can trigger the re-entry
+    # cooldown; their union reproduces the previous ``_should_exit``.
+    def _stop_hit(self, c: float) -> bool:
+        if not self.sl:
+            return False
+        if self.side is PositionSide.LONG:
+            return c <= self.entry_fill * (1 - self.sl / 100.0)
+        return c >= self.entry_fill * (1 + self.sl / 100.0)
+
+    def _profit_hit(self, c: float) -> bool:
         if self.side is PositionSide.LONG:
             if self.rule_type is RuleType.A:
-                if c >= self.entry_fill * (1 + self.tp / 100.0):
-                    return True
-                if self.sl and c <= self.entry_fill * (1 - self.sl / 100.0):
-                    return True
-            else:  # B long
-                if c >= self.sell_price:
-                    return True
-                if self.sl and c <= self.entry_fill * (1 - self.sl / 100.0):
-                    return True
-        else:  # SHORT
-            if self.rule_type is RuleType.A:
-                if c <= self.entry_fill * (1 - self.tp / 100.0):  # price fell -> profit
-                    return True
-                if self.sl and c >= self.entry_fill * (1 + self.sl / 100.0):  # rose -> loss
-                    return True
-            else:  # B short
-                if c <= self.buy_price:
-                    return True
-                if self.sl and c >= self.entry_fill * (1 + self.sl / 100.0):
-                    return True
-        return False
+                return c >= self.entry_fill * (1 + self.tp / 100.0)
+            return c >= self.sell_price  # B long
+        # SHORT: price falling is profit
+        if self.rule_type is RuleType.A:
+            return c <= self.entry_fill * (1 - self.tp / 100.0)
+        return c <= self.buy_price  # B short
 
     def _should_enter(self, c: float) -> bool:
         if self.rule_type is RuleType.A:
@@ -114,12 +123,14 @@ class PositionSim:
             return c <= self.liq_price
         return c >= self.liq_price
 
-    def _do_close(self, exec_price: float, mark: float) -> Fill:
+    def _do_close(self, exec_price: float, mark: float, ts: Optional[datetime] = None, is_stop: bool = False) -> Fill:
         """Close the position at ``exec_price``.
 
         Returns the margin plus realized PnL to cash. With leverage the entry only
         locked ``margin`` (not the full notional), so the margin is added back here;
         at leverage 1 ``margin == notional`` and this reduces to the old spot math.
+
+        A stop-loss exit (``is_stop``) arms the re-entry cooldown.
         """
         traded_qty = self.qty
         if self.side is PositionSide.LONG:
@@ -139,9 +150,12 @@ class PositionSim:
         self.qty = 0.0
         self.margin = 0.0
         self.liq_price = None
+        self._entry_time = None
+        if is_stop and self.cooldown_minutes > 0 and ts is not None:
+            self._cooldown_until = ts + timedelta(minutes=self.cooldown_minutes)
         return self._fill(side, f, traded_qty, mark)
 
-    def _liquidate(self, mark: float) -> Fill:
+    def _liquidate(self, mark: float, ts: Optional[datetime] = None) -> Fill:
         """Force-close a leveraged position: the whole committed margin is lost
         (isolated). The loss is capped at the margin — cash cannot go past it."""
         traded_qty = self.qty
@@ -158,24 +172,72 @@ class PositionSim:
         self.qty = 0.0
         self.margin = 0.0
         self.liq_price = None
+        self._entry_time = None
+        if self.cooldown_minutes > 0 and ts is not None:
+            self._cooldown_until = ts + timedelta(minutes=self.cooldown_minutes)
         return self._fill(side, px, traded_qty, mark)
 
-    def step(self, price: float) -> Optional[Fill]:
+    # -- time-based common risk (inert unless a timestamp is supplied) -----
+    def _roll_day(self, c: float, ts: Optional[datetime]) -> None:
+        if ts is None:
+            return
+        day = ts.strftime("%Y-%m-%d")
+        if day != self._day:
+            self._day = day
+            self._day_start_equity = self.equity(c)
+            if self._halted_day is not None and self._halted_day != day:
+                self._halted_day = None
+
+    def _entry_blocked(self, ts: Optional[datetime]) -> bool:
+        if self._halted_day is not None and self._halted_day == self._day:
+            return True
+        if self._cooldown_until is not None and ts is not None and ts < self._cooldown_until:
+            return True
+        return False
+
+    def _daily_loss_breached(self, c: float) -> bool:
+        if not self.daily_max_loss or self._day is None or self._day_start_equity <= 0:
+            return False
+        dd = (self.equity(c) - self._day_start_equity) / self._day_start_equity * 100.0
+        return dd <= -self.daily_max_loss
+
+    def _max_holding_exceeded(self, ts: Optional[datetime]) -> bool:
+        return (
+            bool(self.max_holding_hours)
+            and ts is not None
+            and self._entry_time is not None
+            and (ts - self._entry_time) >= timedelta(hours=self.max_holding_hours)
+        )
+
+    def step(self, price: float, ts: Optional[datetime] = None) -> Optional[Fill]:
         c = price
+        self._roll_day(c, ts)
+
         # Funding accrues while holding a short.
         if self.in_pos and self.side is PositionSide.SHORT and self.funding > 0:
             self.cash -= self.qty * c * self.funding / 100.0
 
         fill: Optional[Fill] = None
         if self.in_pos:
-            # Liquidation is checked first (conservative): a leveraged position that
-            # breaches its liq price is force-closed, wiping the committed margin.
+            # Priority mirrors engine.candles: liquidation -> stop-loss ->
+            # max-holding -> daily-loss halt -> take-profit / band exit.
             if self._liquidated(c):
-                fill = self._liquidate(c)
-            elif self._should_exit(c):
-                fill = self._do_close(c, c)
+                fill = self._liquidate(c, ts)
+            elif self._stop_hit(c):
+                fill = self._do_close(c, c, ts=ts, is_stop=True)
+            elif self._max_holding_exceeded(ts):
+                fill = self._do_close(c, c, ts=ts)
+            elif self._daily_loss_breached(c):
+                fill = self._do_close(c, c, ts=ts)
+                self._halted_day = self._day
+            elif self._profit_hit(c):
+                fill = self._do_close(c, c, ts=ts)
         else:
-            if self._should_enter(c):
+            # A daily-loss breach halts new entries for the rest of the day even
+            # when already flat.
+            if self._daily_loss_breached(c):
+                self._halted_day = self._day
+            elif not self._entry_blocked(ts) and self._should_enter(c):
                 margin = self.invest_ratio * self.cash  # cash == equity when flat
                 notional = margin * self.leverage
                 if self.side is PositionSide.LONG:
@@ -196,6 +258,7 @@ class PositionSim:
                     f, self.leverage, self.side, commission_pct=self.comm
                 )
                 self.in_pos = True
+                self._entry_time = ts
                 fill = self._fill(side, f, self.qty, c)
         return fill
 
@@ -230,6 +293,10 @@ class DcaSim:
         self.comm = macro.fees.commission_pct
         self.slip = macro.fees.slippage_pct
         self.sl = macro.risk.stop_loss_pct
+        # For DCA, daily-max-loss means "stop buying more today once down N%".
+        # (max_holding / cooldown don't fit buy-and-accumulate and are gated off
+        # in the builder UI for rule C.)
+        self.daily_max_loss = macro.risk.daily_max_loss_pct
         p = macro.params
         self.amount_per_buy = float(p["amount_per_buy"])
         self.interval = max(1, int(p["interval_days"]))
@@ -245,10 +312,23 @@ class DcaSim:
         # DCA (rule C) never uses leverage; expose the fields for a uniform interface.
         self.liquidations = 0
         self.liquidated_loss = 0.0
+        # daily-max-loss state
+        self._day: Optional[str] = None
+        self._day_start_equity = self.initial_capital
+        self._halted_day: Optional[str] = None
 
-    def step(self, price: float) -> Optional[Fill]:
+    def step(self, price: float, ts: Optional[datetime] = None) -> Optional[Fill]:
         c = price
         fill: Optional[Fill] = None
+
+        # Day roll for daily-max-loss (inert when ts is None).
+        if ts is not None:
+            day = ts.strftime("%Y-%m-%d")
+            if day != self._day:
+                self._day = day
+                self._day_start_equity = self.equity(c)
+                if self._halted_day is not None and self._halted_day != day:
+                    self._halted_day = None
 
         # Optional stop loss on the accumulated position.
         if self.sl and self.qty > 0 and not self.stopped:
@@ -262,9 +342,18 @@ class DcaSim:
                 self.stopped = True
                 fill = self._fill("sell", f, traded, c)
 
+        # Daily-max-loss: once today's equity is down past the threshold, buy no
+        # more for the rest of the day (position is kept — DCA holds).
+        if self.daily_max_loss and self._day is not None and self._day_start_equity > 0:
+            dd = (self.equity(c) - self._day_start_equity) / self._day_start_equity * 100.0
+            if dd <= -self.daily_max_loss:
+                self._halted_day = self._day
+
         # Scheduled buy.
+        halted_today = self._halted_day is not None and self._halted_day == self._day
         can_buy = (
             not self.stopped
+            and not halted_today
             and self._step % self.interval == 0
             and (self.max_buys is None or self.buys_done < self.max_buys)
             and self.cash >= self.amount_per_buy

@@ -4,6 +4,7 @@ import Builder from "../components/Builder.jsx";
 import ResultView from "../components/ResultView.jsx";
 import SimBadge from "../components/SimBadge.jsx";
 import PaperPanel from "../components/PaperPanel.jsx";
+import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import { api } from "../api.js";
 import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
 
@@ -21,6 +22,8 @@ export default function Studio() {
   const [share, setShare] = useState(null); // { slug, url }
   const [loadedFrom, setLoadedFrom] = useState("");
   const [runLeverage, setRunLeverage] = useState(1); // leverage of the last run (for badges)
+  const [autoRun, setAutoRun] = useState(true); // re-run backtest automatically on builder change
+  const [registerOpen, setRegisterOpen] = useState(false); // 리더보드 등록 모달
 
   // Clone flow: load a shared macro into the builder.
   useEffect(() => {
@@ -60,6 +63,32 @@ export default function Studio() {
   }, [searchParams, slug]);
 
   const valErr = validate(form);
+
+  // Auto-run: re-run the backtest a beat after the builder settles, so tweaking
+  // a value no longer means "scroll down → click 실행 → scroll back up" each time.
+  // Only fires once a first result exists (so the empty state isn't skipped) and
+  // the form is valid. Debounced; skipped while a run is already in flight.
+  useEffect(() => {
+    if (!autoRun || valErr || !result) return;
+    const t = setTimeout(() => {
+      if (!busy) runBacktest();
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun, JSON.stringify(form)]);
+
+  // Ctrl/⌘+Enter runs the backtest from anywhere on the page.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (!valErr && !busy) runBacktest();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valErr, busy, JSON.stringify(form)]);
 
   async function runBacktest() {
     setError("");
@@ -113,7 +142,7 @@ export default function Studio() {
         {valErr && <div className="mt-4 text-sm text-amber-700">{valErr}</div>}
         {error && <div className="mt-4 text-sm text-red-600">오류: {error}</div>}
 
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex items-center gap-3 flex-wrap">
           <button
             onClick={runBacktest}
             disabled={busy || !!valErr}
@@ -128,6 +157,16 @@ export default function Studio() {
           >
             저장 & 공유 링크 생성
           </button>
+          <label
+            className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none"
+            title="빌더를 바꾸면 자동으로 백테스트를 다시 실행합니다"
+          >
+            <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} />
+            ⚡ 자동 실행
+          </label>
+          <span className="text-xs text-slate-400">
+            빌더 수정 시 자동 재실행 · <kbd className="rounded border border-slate-300 bg-slate-100 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-100 px-1">Enter</kbd> 로도 실행
+          </span>
         </div>
       </section>
 
@@ -149,7 +188,7 @@ export default function Studio() {
 
         {result && (
           <div className="mt-6">
-            <PaperPanel macro={buildMacro(form)} valErr={valErr} />
+            <PaperPanel macro={buildMacro(form)} valErr={valErr} onRegister={() => setRegisterOpen(true)} />
           </div>
         )}
 
@@ -180,6 +219,16 @@ export default function Studio() {
           </div>
         )}
       </section>
+
+      {registerOpen && (
+        <RegisterMacroModal
+          key="studio-register"
+          open={true}
+          initialMacro={valErr ? null : buildMacro(form)}
+          onClose={() => setRegisterOpen(false)}
+          onDone={() => setRegisterOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from sqlmodel import select
@@ -142,10 +142,17 @@ def _load_replay_prices(symbol: str) -> List[float]:
 async def _run_loop(runner: _Runner) -> None:
     try:
         if runner.mode == "replay":
-            for price in runner.replay_prices:
+            # Replay of recent 1m candles: advance a virtual clock across
+            # REPLAY_HOURS so time-based rules (max holding / cooldown / daily
+            # loss) actually fire during the fast-forward instead of being
+            # pinned to (near-constant) wall-clock time.
+            n = len(runner.replay_prices)
+            base = datetime.now(timezone.utc) - timedelta(hours=REPLAY_HOURS)
+            per = (REPLAY_HOURS * 3600.0) / max(1, n)
+            for i, price in enumerate(runner.replay_prices):
                 if runner.stop_flag:
                     break
-                _tick(runner, price)
+                _tick(runner, price, base + timedelta(seconds=i * per))
                 await asyncio.sleep(REPLAY_SECONDS)
             _finalize(runner)  # replay exhausted -> auto stop
         else:
@@ -153,15 +160,15 @@ async def _run_loop(runner: _Runner) -> None:
                 # Cached per-symbol: concurrent sessions on the same coin share one fetch.
                 price = await asyncio.to_thread(get_ticker_price_cached, runner.symbol)
                 if price is not None:
-                    _tick(runner, price)
+                    _tick(runner, price, datetime.now(timezone.utc))
                 await asyncio.sleep(POLL_SECONDS)
     except asyncio.CancelledError:
         pass
 
 
-def _tick(runner: _Runner, price: float) -> None:
+def _tick(runner: _Runner, price: float, ts: Optional[datetime] = None) -> None:
     runner.last_price = price
-    fill = runner.sim.step(price)
+    fill = runner.sim.step(price, ts)
     runner.equity = runner.sim.equity(price)
     runner.ret = (runner.equity - runner.initial) / runner.initial * 100.0
     runner.liquidations = getattr(runner.sim, "liquidations", 0)

@@ -823,7 +823,7 @@ class CandleAggregatorSim:
         self._count = 0
         self._queue: deque[Fill] = deque()
 
-    def step(self, price: float) -> Optional[Fill]:
+    def step(self, price: float, ts: Optional[datetime] = None) -> Optional[Fill]:
         if self._o is None:
             self._o = self._h = self._l = self._c = price
         else:
@@ -832,8 +832,10 @@ class CandleAggregatorSim:
             self._c = price
         self._count += 1
         if self._count >= self.n:
-            ts = datetime.now(timezone.utc)
-            for f in self.inner.on_candle(self._o, self._h, self._l, self._c, ts):
+            # Caller-supplied sim-time (paper replay uses a virtual clock so
+            # time-based rules are demonstrable); fall back to wall-clock.
+            when = ts if ts is not None else datetime.now(timezone.utc)
+            for f in self.inner.on_candle(self._o, self._h, self._l, self._c, when):
                 self._queue.append(f)
             self._o = None
             self._count = 0

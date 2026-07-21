@@ -115,7 +115,7 @@ def _run_single_position(macro: Macro, df: pd.DataFrame) -> BacktestResult:
     equity_curve: List[EquityPoint] = []
     for i in range(len(closes)):
         c = closes[i]
-        sim.step(c)
+        sim.step(c, pd.Timestamp(times[i]).to_pydatetime())
         equity_curve.append(EquityPoint(t=_iso(times[i]), equity=round(sim.equity(c), 4)))
 
     return _metrics(
@@ -146,7 +146,7 @@ def _run_dca(macro: Macro, df: pd.DataFrame) -> BacktestResult:
     equity_curve: List[EquityPoint] = []
     for i in range(n):
         c = closes[i]
-        sim.step(c)
+        sim.step(c, pd.Timestamp(times[i]).to_pydatetime())
         equity_curve.append(EquityPoint(t=_iso(times[i]), equity=round(sim.equity(c), 4)))
 
     final_return = (

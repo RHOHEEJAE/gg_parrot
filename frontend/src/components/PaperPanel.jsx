@@ -20,12 +20,13 @@ function PaperBadge() {
   );
 }
 
-export default function PaperPanel({ macro, valErr }) {
+export default function PaperPanel({ macro, valErr, onRegister }) {
   const [session, setSession] = useState(null); // {session_id,...}
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState("live"); // live | replay
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [startedMacro, setStartedMacro] = useState(null); // macro snapshot the running session was started with
   const pollRef = useRef(null);
 
   function stopPolling() {
@@ -44,6 +45,7 @@ export default function PaperPanel({ macro, valErr }) {
     try {
       const s = await api.paperStart(macro, macro.symbol, mode);
       setSession(s);
+      setStartedMacro(macro); // freeze the settings this session runs with
       setStatus(null);
       stopPolling();
       const poll = async () => {
@@ -77,6 +79,18 @@ export default function PaperPanel({ macro, valErr }) {
     }
   }
 
+  // Apply the current builder settings by stopping the running session and
+  // starting a fresh one with the new macro.
+  async function restart() {
+    if (session) {
+      try {
+        await api.paperStop(session.session_id);
+      } catch (_) {}
+      stopPolling();
+    }
+    await start();
+  }
+
   async function downloadBot() {
     setError("");
     try {
@@ -89,6 +103,11 @@ export default function PaperPanel({ macro, valErr }) {
   const running = status?.status === "running";
   const ret = status?.current_return ?? 0;
   const up = ret >= 0;
+  // The running session is locked to the macro it was started with; the builder
+  // above can change independently. Flag the drift so the user knows the live
+  // figures don't reflect their latest edits until they restart.
+  const macroChanged =
+    running && startedMacro && JSON.stringify(startedMacro) !== JSON.stringify(macro);
 
   return (
     <div className="rounded-2xl bg-white border border-slate-200 p-6 space-y-5">
@@ -151,6 +170,33 @@ export default function PaperPanel({ macro, valErr }) {
         </span>
       </div>
 
+      {/* settings-snapshot notice: makes it explicit that a running session is
+          locked to the settings at start time, not the live builder values. */}
+      {running ? (
+        macroChanged ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 flex items-center justify-between gap-3 flex-wrap">
+            <span>
+              🔒 빌더 설정을 바꿨지만, 현재 세션은 <b>시작 시점 설정</b>으로 계속 실행 중이에요. 아래 수익률은 바뀐 설정을 반영하지 않습니다.
+            </span>
+            <button
+              onClick={restart}
+              disabled={busy || !!valErr}
+              className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 px-3 py-1.5 font-semibold text-white"
+            >
+              🔄 바뀐 설정으로 재시작
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+            🔒 이 세션은 <b>시작 시점의 빌더 설정</b>으로 고정되어 실행 중입니다. 빌더를 바꾸면 자동 반영되지 않고, 재시작해야 적용돼요.
+          </div>
+        )
+      ) : (
+        <div className="text-xs text-slate-500">
+          ▶ 시작을 누르는 순간의 빌더 설정으로 실행됩니다. (실행 중 변경은 재시작 전까지 반영되지 않아요)
+        </div>
+      )}
+
       <p className="text-xs text-slate-500">
         💵 금액 단위는 <b>{quoteOf(macro.symbol)}</b>(미국 달러 기준, 원화 아님) · 수량 단위는 코인 개수({baseOf(macro.symbol)})입니다.
       </p>
@@ -180,6 +226,34 @@ export default function PaperPanel({ macro, valErr }) {
               {running ? <span className="text-indigo-600">● 실행중</span> : "중지됨"}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* register to leaderboard — surfaces right where the paper return shows,
+          so a good run can go straight to the board without leaving the builder. */}
+      {onRegister && (
+        <div
+          className={
+            "rounded-xl border p-4 flex items-center justify-between gap-3 flex-wrap " +
+            (status && ret > 0 ? "border-green-300 bg-green-50" : "border-slate-200 bg-slate-50")
+          }
+        >
+          <div className="text-sm text-slate-700">
+            {status && ret > 0 ? (
+              <span>
+                📈 지금 <b className="text-green-700">+{ret.toFixed(2)}%</b> — 이 매크로를 오늘의 리더보드에 올려보세요!
+              </span>
+            ) : (
+              <span>이 매크로를 <b>오늘의 리더보드</b>에 등록해 다른 사람과 겨뤄보세요.</span>
+            )}
+          </div>
+          <button
+            onClick={onRegister}
+            disabled={!!valErr}
+            className="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
+          >
+            🏆 리더보드에 등록
+          </button>
         </div>
       )}
 

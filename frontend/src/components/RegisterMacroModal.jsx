@@ -6,15 +6,18 @@ import { getNickname, getUserId, setNickname } from "../lib/user.js";
 
 // Popup builder. Two modes:
 //  * register (default): pick a macro + 아이디/비밀번호 -> starts a paper session
-//    and adds it to the board.
+//    and adds it to the board. `initialMacro` prefills the builder (e.g. the
+//    macro the user just tested in the Studio) so they can register it directly.
 //  * edit (editEntry set): prefilled with the entry's macro; the password is
 //    verified server-side before the edit is applied.
 // Mount with a `key` so switching mode/entry resets the internal form state.
-export default function RegisterMacroModal({ open, onClose, onDone, editEntry = null }) {
+export default function RegisterMacroModal({ open, onClose, onDone, editEntry = null, initialMacro = null }) {
   const isEdit = !!editEntry;
-  const [form, setForm] = useState(() =>
-    isEdit && editEntry.macro ? macroToForm(editEntry.macro) : defaultForm()
-  );
+  const [form, setForm] = useState(() => {
+    if (isEdit && editEntry.macro) return macroToForm(editEntry.macro);
+    if (initialMacro) return macroToForm(initialMacro);
+    return defaultForm();
+  });
   const [username, setUser] = useState(isEdit ? editEntry.username || "" : getNickname());
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("live");

@@ -298,25 +298,43 @@ export default function Builder({ form, setForm }) {
         </div>
       </div>
 
-      {/* advanced common risk */}
-      <details className="rounded-xl border border-slate-200 p-4">
-        <summary className="text-sm font-semibold text-slate-500 cursor-pointer">공통 리스크 관리 (고급)</summary>
-        <div className="grid grid-cols-3 gap-4 mt-4">
-          <Field label="일일 최대손실 (%)" term="daily_max_loss" hint="도달 시 당일 거래 중단">
-            <div className="flex items-center gap-2">
-              <input type="checkbox" checked={form.use_daily_max_loss} onChange={setChk("use_daily_max_loss")} />
-              <input className={inputCls} type="number" value={form.daily_max_loss_pct} disabled={!form.use_daily_max_loss} onChange={set("daily_max_loss_pct")} />
+      {/* advanced common risk. For DCA (rule C) the time-based holding/cooldown
+          controls don't apply (buy-and-accumulate, no round-trip exits), so they
+          are disabled with a note; 일일 최대손실 still works (halts buys for the day). */}
+      {(() => {
+        const isDca = rt === "C";
+        return (
+          <details className="rounded-xl border border-slate-200 p-4">
+            <summary className="text-sm font-semibold text-slate-500 cursor-pointer">공통 리스크 관리 (고급)</summary>
+            <div className="grid grid-cols-3 gap-4 mt-4">
+              <Field label="일일 최대손실 (%)" term="daily_max_loss" hint={isDca ? "도달 시 당일 추가 매수 중단" : "도달 시 당일 거래 중단"}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={form.use_daily_max_loss} onChange={setChk("use_daily_max_loss")} />
+                  <input className={inputCls} type="number" value={form.daily_max_loss_pct} disabled={!form.use_daily_max_loss} onChange={set("daily_max_loss_pct")} />
+                </div>
+              </Field>
+              <Field label="최대 보유시간 (h)" term="max_holding" hint={isDca ? "DCA(누적 매수)에는 미적용" : "초과 시 강제 청산"}>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" checked={!isDca && form.use_max_holding} disabled={isDca} onChange={setChk("use_max_holding")} />
+                  <input className={inputCls} type="number" value={form.max_holding_hours} disabled={isDca || !form.use_max_holding} onChange={set("max_holding_hours")} />
+                </div>
+              </Field>
+              {isDca ? (
+                <Field label="재진입 금지 (분)" term="cooldown" hint="DCA(누적 매수)에는 미적용">
+                  <input className={inputCls} type="number" value={form.cooldown_minutes} disabled onChange={set("cooldown_minutes")} />
+                </Field>
+              ) : (
+                num("cooldown_minutes", "재진입 금지 (분)", { term: "cooldown", hint: "손절 후 쿨다운" })
+              )}
             </div>
-          </Field>
-          <Field label="최대 보유시간 (h)" term="max_holding" hint="초과 시 강제 청산">
-            <div className="flex items-center gap-2">
-              <input type="checkbox" checked={form.use_max_holding} onChange={setChk("use_max_holding")} />
-              <input className={inputCls} type="number" value={form.max_holding_hours} disabled={!form.use_max_holding} onChange={set("max_holding_hours")} />
-            </div>
-          </Field>
-          {num("cooldown_minutes", "재진입 금지 (분)", { term: "cooldown", hint: "손절 후 쿨다운" })}
-        </div>
-      </details>
+            {isDca && (
+              <div className="mt-3 text-xs text-slate-500">
+                ※ DCA 전략은 매수 후 계속 보유하는 방식이라 <b>최대 보유시간·재진입 금지</b>는 적용되지 않아요. 익절/청산이 있는 전략(A·B·E~J)에서 동작합니다.
+              </div>
+            )}
+          </details>
+        );
+      })()}
 
       {/* fees */}
       <details className="rounded-xl border border-slate-200 p-4">

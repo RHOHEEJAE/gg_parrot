@@ -450,7 +450,7 @@ def paper_trades(session_id: int) -> dict:
     return {"trades": paper_mod.get_trades(session_id)}
 
 
-# --- real-trade executable bundle (DEMO MOCKUP; never trades) -----------
+# --- real-trade executable bundle (real orders; default testnet/fake funds) -----------
 @app.post("/api/realtrade/bundle")
 def realtrade_bundle(req: BundleRequest) -> Response:
     data = build_bundle(req.macro)
