@@ -4,6 +4,7 @@ import Builder from "../components/Builder.jsx";
 import ResultView from "../components/ResultView.jsx";
 import SimBadge from "../components/SimBadge.jsx";
 import PaperPanel from "../components/PaperPanel.jsx";
+import OptimizePanel from "../components/OptimizePanel.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import { api } from "../api.js";
 import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
@@ -184,6 +185,12 @@ export default function Studio() {
 
         {result && (
           <ResultView result={result} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} leverage={runLeverage} />
+        )}
+
+        {result && form.rule_type === "A" && (
+          <div className="mt-6">
+            <OptimizePanel form={form} setForm={setForm} valErr={valErr} />
+          </div>
         )}
 
         {result && (

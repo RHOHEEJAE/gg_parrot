@@ -26,6 +26,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ macro, period_override: periodOverride || null }),
     }),
+  // parameter sweep (익절/손절 자동 최적화). tpValues/slValues optional (server defaults).
+  optimize: (macro, tpValues, slValues) =>
+    req("/api/optimize", {
+      method: "POST",
+      body: JSON.stringify({ macro, tp_values: tpValues || null, sl_values: slValues || null }),
+    }),
+
   gallery: () => req("/api/gallery"),
   cardUrl: (slug) => `/api/card/${slug}.png`,
 

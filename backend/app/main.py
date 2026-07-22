@@ -9,7 +9,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,7 @@ from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
 from . import kimchi as kimchi_mod
 from . import leaderboard as leaderboard_mod
+from . import optimize as optimize_mod
 from . import paper as paper_mod
 from .card import render_card
 from .security import hash_password
@@ -105,6 +106,12 @@ class PaperStartRequest(BaseModel):
     macro: Macro
     symbol: Optional[str] = None
     mode: str = "live"  # live | replay
+
+
+class OptimizeRequest(BaseModel):
+    macro: Macro
+    tp_values: Optional[List[float]] = None
+    sl_values: Optional[List[float]] = None
 
 
 class BundleRequest(BaseModel):
@@ -223,6 +230,23 @@ def backtest(req: BacktestRequest) -> dict:
         "period_label": period_label,
         "disclaimer": "past simulation only; not real trading",
     }
+
+
+@app.post("/api/optimize")
+def optimize(req: OptimizeRequest) -> dict:
+    """Sweep take-profit × stop-loss and return a scored grid (자동 최적화).
+
+    Past-fit only: the response flags the overfitting risk and the UI must show
+    it. Refuses symbols with no real spot data (422) rather than fabricating.
+    """
+    try:
+        return optimize_mod.optimize_tp_sl(req.macro, req.tp_values, req.sl_values)
+    except NoSpotDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/kimchi-premium")
