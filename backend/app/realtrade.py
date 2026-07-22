@@ -589,6 +589,60 @@ Invoke-Expression "$py `"$PSScriptRoot\\bot.py`""
 Read-Host "Press Enter to exit"
 """
 
+# --- run.command (macOS double-click launcher; ASCII, LF, executable) ----
+# Written to the zip with LF endings and a 0o755 mode so Finder treats it as an
+# executable a user can double-click (it opens Terminal). Korean guidance lives
+# in README-run.txt so this stays ASCII-only. Shebang forces /bin/bash (present
+# on macOS even though the default interactive shell is zsh).
+_RUN_COMMAND = """#!/bin/bash
+# Coin Macro Bot launcher (macOS). Korean guide: README-run.txt
+# Double-click in Finder. If macOS blocks it ("cannot be opened" / "unidentified
+# developer"), right-click the file > Open once, or in Terminal run:
+#     xattr -d com.apple.quarantine run.command ; chmod +x run.command
+# You can also just run:  bash run.command
+cd "$(dirname "$0")" || exit 1
+
+echo "============================================================"
+echo "  Coin Macro Bot (Binance Spot + USDT-M Futures)"
+echo "  * Default is TESTNET (fake funds). No real assets are moved."
+echo "  * Short / leverage macros run on Futures automatically."
+echo "  * Korean guide: open README-run.txt"
+echo "============================================================"
+echo
+
+# Find Python 3: prefer python3, then python (macOS has no python2 by default).
+PYEXE=""
+if command -v python3 >/dev/null 2>&1; then
+  PYEXE="python3"
+elif command -v python >/dev/null 2>&1; then
+  PYEXE="python"
+fi
+if [ -z "$PYEXE" ]; then
+  echo "[ERROR] Python 3 was not found."
+  echo "  Install it from https://www.python.org/downloads/ (or: brew install python)"
+  echo "  then double-click run.command again."
+  echo
+  read -n 1 -s -r -p "Press any key to close..."
+  exit 1
+fi
+echo "Using Python: $PYEXE"
+echo
+
+echo "[1/2] Installing dependency (python-binance)..."
+"$PYEXE" -m pip install -r requirements.txt
+if [ $? -ne 0 ]; then
+  echo "  pip failed; retrying with --user ..."
+  "$PYEXE" -m pip install --user -r requirements.txt
+fi
+echo
+
+echo "[2/2] Starting bot..."
+"$PYEXE" bot.py
+
+echo
+read -n 1 -s -r -p "=== Finished. Press any key to close. ==="
+"""
+
 _README_TXT = """코인 매크로 봇 (바이낸스 현물+선물 실구동)
 ==========================================
 
@@ -599,17 +653,28 @@ _README_TXT = """코인 매크로 봇 (바이낸스 현물+선물 실구동)
   - 롱·레버리지 1                → 현물(Spot)로 실행
   - 환경변수 BOT_MARKET=spot|futures|auto 로 강제 지정도 가능(기본 auto)
 
-가장 쉬운 실행 (Windows, 2단계)
+가장 쉬운 실행 — Windows (2단계)
   ① Python 3.10+ 설치 (https://www.python.org/downloads/, 설치 시 "Add Python to PATH" 체크)
   ② run.bat 더블클릭  → 의존성 설치 후 봇 실행 → API 키 입력
 
-수동 실행 (run.bat 이 막힐 때)
-  1) 이 폴더에서:  pip install -r requirements.txt
-  2) 그다음:       python bot.py
-  (PowerShell 사용 시 run.ps1 도 있습니다. 실행정책 막히면 안내 문구 참고.)
+가장 쉬운 실행 — macOS (2단계)
+  ① Python 3.10+ 설치 (https://www.python.org/downloads/ 또는 터미널에서 brew install python)
+  ② run.command 더블클릭  → 의존성 설치 후 봇 실행 → API 키 입력
+     · 처음 열 때 "확인되지 않은 개발자"라고 막히면: run.command 를 우클릭 → "열기"를 한 번 눌러요.
+     · 그래도 막히면 터미널에서:
+         cd (이 폴더로 이동)
+         xattr -d com.apple.quarantine run.command ; chmod +x run.command
+         ./run.command
+       또는 그냥:  bash run.command
+
+수동 실행 (런처가 막힐 때 · Windows/macOS 공통)
+  1) 이 폴더에서:  pip install -r requirements.txt   (macOS는 pip3)
+  2) 그다음:       python bot.py                      (macOS는 python3)
+  (Windows PowerShell 사용 시 run.ps1 도 있습니다. 실행정책 막히면 안내 문구 참고.)
 
 포함 파일
-  - run.bat / run.ps1 : 실행 런처(파이썬 탐색 → 의존성 설치 → bot.py)
+  - run.bat / run.ps1 : Windows 실행 런처(파이썬 탐색 → 의존성 설치 → bot.py)
+  - run.command       : macOS 실행 런처(더블클릭, 파이썬 탐색 → 의존성 설치 → bot.py)
   - bot.py            : 실구동 봇(현물/선물 실제 주문, 기본은 테스트넷 가짜 자금)
   - requirements.txt  : python-binance
   - macro.json        : 이 봇이 따를 매크로 설정(방향/레버리지 포함)
@@ -657,6 +722,7 @@ _README_TXT = """코인 매크로 봇 (바이낸스 현물+선물 실구동)
         - 선물 실거래는 계정에서 선물 지갑 활성화 + USDT 증거금 이체가 필요합니다.
   3) 반드시 소액부터. 환경변수로 1회 주문 상한을 낮추세요:
         (Windows) set MAX_ORDER_USDT=10  후 run.bat 실행
+        (macOS)   export MAX_ORDER_USDT=10  후 ./run.command (또는 bash run.command) 실행
      레버리지는 위험을 배수로 키웁니다. 처음엔 레버리지를 낮게, 상한도 낮게.
   4) 시장가 주문은 슬리피지가 있을 수 있습니다. 소액으로 흐름을 확인하세요.
   5) 선물 숏은 손실이 이론상 무제한입니다. 손절(stop_loss)을 반드시 설정하세요.
@@ -673,7 +739,9 @@ _README_TXT = """코인 매크로 봇 (바이낸스 현물+선물 실구동)
 
 
 def build_bundle(macro: Macro) -> bytes:
-    """Return a zip: run.bat, run.ps1, bot.py, requirements.txt, macro.json, README."""
+    """Return a zip: run.bat, run.ps1, run.command, bot.py, requirements.txt,
+    macro.json, README. Windows launchers use CRLF; the macOS launcher is written
+    with LF and a 0o755 mode so Finder can double-click it."""
     summary = human_summary(macro)
     macro_payload = macro.model_dump(mode="json")
     macro_payload["human_summary"] = summary
@@ -682,10 +750,19 @@ def build_bundle(macro: Macro) -> bytes:
     def crlf(text: str) -> str:
         return text.replace("\r\n", "\n").replace("\n", "\r\n")
 
+    def _executable_info(name: str) -> zipfile.ZipInfo:
+        # Mark the entry rwxr-xr-x so it stays executable after unzip on macOS.
+        info = zipfile.ZipInfo(name)
+        info.external_attr = 0o755 << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        return info
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("run.bat", crlf(_RUN_BAT))
         zf.writestr("run.ps1", crlf(_RUN_PS1))
+        # LF endings (a CRLF shebang breaks on macOS) + executable bit.
+        zf.writestr(_executable_info("run.command"), _RUN_COMMAND)
         zf.writestr("bot.py", _BOT_PY)
         zf.writestr("requirements.txt", _REQUIREMENTS_TXT)
         zf.writestr("macro.json", json.dumps(macro_payload, ensure_ascii=False, indent=2))

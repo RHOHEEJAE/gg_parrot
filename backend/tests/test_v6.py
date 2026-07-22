@@ -81,9 +81,15 @@ def test_bundle_contains_run_bat_and_requirements():
     data = build_bundle(macro)
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         names = set(zf.namelist())
-        assert {"run.bat", "bot.py", "requirements.txt", "macro.json", "README-run.txt"} <= names
+        assert {"run.bat", "run.command", "bot.py", "requirements.txt", "macro.json", "README-run.txt"} <= names
         run_bat = zf.read("run.bat").decode("utf-8")
         assert "bot.py" in run_bat and "pause" in run_bat and "%~dp0" in run_bat
+        # macOS launcher: LF endings, bash shebang, executable bit for Finder.
+        info = zf.getinfo("run.command")
+        run_cmd = zf.read("run.command").decode("utf-8")
+        assert run_cmd.startswith("#!/bin/bash") and "\r\n" not in run_cmd
+        assert "bot.py" in run_cmd
+        assert (info.external_attr >> 16) & 0o111  # any execute bit set
 
 
 # --- 3) leaderboard -----------------------------------------------------
