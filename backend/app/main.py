@@ -26,7 +26,8 @@ from . import optimize as optimize_mod
 from . import paper as paper_mod
 from .card import render_card
 from .security import hash_password
-from .data import NoSpotDataError, get_klines, resolve_period
+from .data import NoSpotDataError, average_daily_funding_pct, get_klines, resolve_period
+from .marketdata import fetch_klines_for_macro
 from .db import MacroRow, get_session, init_db
 from .engine import BacktestResult, Macro, Period, human_summary
 from .engine.backtest import run_backtest
@@ -83,11 +84,10 @@ def _make_slug(macro: Macro) -> str:
 
 def _run_for_macro(macro: Macro) -> tuple[BacktestResult, str, str]:
     start_ms, end_ms = resolve_period(macro.period.preset, macro.period.start, macro.period.end)
-    # allow_synthetic=False: refuse to fabricate returns for symbols with no
-    # real spot data (raises NoSpotDataError -> 422 at the endpoint).
-    df, source = get_klines(
-        macro.symbol, start_ms, end_ms, interval=macro.candle_interval, allow_synthetic=False
-    )
+    # Picks spot vs USDT-M futures candles per the macro (short/leverage -> real
+    # futures data). No synthetic fallback: a symbol with no real data raises
+    # NoSpotDataError -> 422 at the endpoint.
+    df, source = fetch_klines_for_macro(macro, start_ms, end_ms)
     result = run_backtest(macro, df)
     return result, source, _period_label(macro.period)
 
@@ -247,6 +247,32 @@ def optimize(req: OptimizeRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/funding-rate")
+def funding_rate(
+    symbol: str,
+    preset: str = "1y",
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+) -> dict:
+    """Average *daily* USDT-M funding cost (%) for a symbol over the period.
+
+    Reference for prefilling the backtest funding fee with a realistic number.
+    ``available`` is False (and the pct null) when the symbol has no perp market
+    or the funding API is unreachable — the UI keeps the user's manual value.
+    """
+    try:
+        start_ms, end_ms = resolve_period(preset, start, end)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    avg = average_daily_funding_pct(symbol.upper(), start_ms, end_ms)
+    return {
+        "symbol": symbol.upper(),
+        "avg_daily_funding_pct": avg,
+        "available": avg is not None,
+        "note": "3 settlements/day, mean absolute rate; reference only",
+    }
 
 
 @app.get("/api/kimchi-premium")

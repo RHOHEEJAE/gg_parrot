@@ -229,6 +229,10 @@ class Macro(BaseModel):
     # Any leverage > 1 turns on the isolated-margin liquidation simulation.
     leverage: int = Field(default=1, ge=1)
     margin_mode: Literal["isolated"] = "isolated"  # MVP: isolated only (cross is out of scope)
+    # Price-data source for backtest/paper. "auto" mirrors the real bot's choice
+    # (futures when the position is short or leverage>1, else spot); "spot"/
+    # "futures" force it. Futures uses real USDT-M perp candles + funding.
+    market: Literal["auto", "spot", "futures"] = "auto"
     params: dict = Field(default_factory=dict)
     risk: Risk = Field(default_factory=Risk)
     period: Period = Field(default_factory=Period)
@@ -309,3 +313,14 @@ class Macro(BaseModel):
     def initial_capital(self) -> Optional[float]:
         v = self.params.get("initial_capital")
         return float(v) if v is not None else None
+
+    def resolved_market(self) -> str:
+        """'spot' or 'futures' for data selection.
+
+        "auto" mirrors the real bot: short OR leverage>1 needs futures, else
+        spot. An explicit "spot"/"futures" is honored as-is.
+        """
+        if self.market in ("spot", "futures"):
+            return self.market
+        needs_futures = self.position_side is PositionSide.SHORT or self.leverage > 1
+        return "futures" if needs_futures else "spot"

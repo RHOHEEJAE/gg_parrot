@@ -42,6 +42,14 @@ export const api = {
   // approximate USD→KRW rate (reference only) for showing 원화 next to USDT amounts
   usdKrw: () => req("/api/usdkrw"),
 
+  // average daily USDT-M funding cost (%) for the symbol/period (real futures data)
+  fundingRate: (symbol, preset, start, end) => {
+    const q = new URLSearchParams({ symbol, preset: preset || "1y" });
+    if (start) q.set("start", start);
+    if (end) q.set("end", end);
+    return req(`/api/funding-rate?${q.toString()}`);
+  },
+
   // '오늘의 경주마' hot coins (server-cached, shared across clients)
   hotCoins: (limit) => req(`/api/hot-coins?limit=${limit || 10}`),
 

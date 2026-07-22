@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .data import get_klines, resolve_period
+from .data import resolve_period
 from .engine import Macro, run_backtest
+from .marketdata import fetch_klines_for_macro
 
 # Bound each axis so one request can't explode into thousands of backtests.
 MAX_AXIS = 12
@@ -49,9 +50,7 @@ def optimize_tp_sl(
     sls = _clean_axis(sl_values, DEFAULT_SL)
 
     start_ms, end_ms = resolve_period(macro.period.preset, macro.period.start, macro.period.end)
-    df, source = get_klines(
-        macro.symbol, start_ms, end_ms, interval=macro.candle_interval, allow_synthetic=False
-    )
+    df, source = fetch_klines_for_macro(macro, start_ms, end_ms)
 
     cells: List[dict] = []
     best: Optional[dict] = None

@@ -42,7 +42,7 @@ def test_clean_axis_dedupes_sorts_and_caps():
 # --- sweep over a stubbed data source -----------------------------------
 def test_optimize_grid_shape_and_best(monkeypatch):
     closes = [100, 105, 103, 110, 108, 120, 118, 130, 128, 140]
-    monkeypatch.setattr("app.optimize.get_klines", lambda *a, **k: (_df(closes), "cache"))
+    monkeypatch.setattr("app.optimize.fetch_klines_for_macro", lambda *a, **k: (_df(closes), "cache"))
 
     res = optimize_tp_sl(_macro(), tp_values=[3, 5, 8], sl_values=[2, 4])
     assert res["tp_values"] == [3.0, 5.0, 8.0]

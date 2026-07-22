@@ -24,6 +24,13 @@ import pandas as pd
 _BINANCE_BASE = os.environ.get("BINANCE_API_BASE", "https://api.binance.com").rstrip("/")
 _BASE = f"{_BINANCE_BASE}/api/v3/klines"
 _TICKER = f"{_BINANCE_BASE}/api/v3/ticker/price"
+
+# USDT-M futures (perp) host — separate from spot, env-configurable for the same
+# geo-block reasons. Used to backtest short/leverage macros on real futures
+# prices and to read historical funding rates.
+_FUTURES_BASE = os.environ.get("BINANCE_FAPI_BASE", "https://fapi.binance.com").rstrip("/")
+_FUT_KLINES = f"{_FUTURES_BASE}/fapi/v1/klines"
+_FUT_FUNDING = f"{_FUTURES_BASE}/fapi/v1/fundingRate"
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "cache")
 _DB_PATH = os.path.join(_CACHE_DIR, "market.db")
 _MS_DAY = 86_400_000
@@ -100,13 +107,16 @@ def _write_cache(symbol: str, interval: str, raw: list[list]) -> None:
 
 
 # --- network fetch ------------------------------------------------------
-def _fetch_binance(symbol: str, interval: str, start_ms: int, end_ms: int) -> list[list]:
+def _fetch_binance(
+    symbol: str, interval: str, start_ms: int, end_ms: int, url: str = _BASE
+) -> list[list]:
+    """Page klines from ``url`` (spot or futures — the payload shape is identical)."""
     out: list[list] = []
     cursor = start_ms
     with httpx.Client(timeout=15.0) as client:
         while cursor < end_ms:
             resp = client.get(
-                _BASE,
+                url,
                 params={
                     "symbol": symbol,
                     "interval": interval,
@@ -189,46 +199,106 @@ def get_ticker_price_cached(symbol: str, ttl: float = 2.0) -> Optional[float]:
 
 
 # --- public API ---------------------------------------------------------
+NO_FUT_MSG = "이 종목은 USDT-M 선물 시세 데이터가 없어 선물로 시뮬레이션할 수 없습니다."
+
+
 def get_klines(
     symbol: str,
     start_ms: int,
     end_ms: int,
     interval: str = "1d",
     *,
+    market: str = "spot",
     allow_synthetic: bool = True,
 ) -> tuple[pd.DataFrame, str]:
     """Return (OHLCV dataframe, source) for the window.
 
-    source is one of: "cache", "binance", "synthetic".
+    ``market`` selects the data source:
+      * "spot"    — Binance spot klines (default; original behaviour).
+      * "futures" — USDT-M perpetual klines (real short/leverage prices). Cached
+        under a separate key so it never collides with spot; no synthetic
+        fallback — a symbol with no perp market raises :class:`NoSpotDataError`.
+
+    source is one of: "cache", "binance", "binance-futures", "synthetic".
 
     ``allow_synthetic`` (default True) keeps the offline demo fallback for the
-    original share/gallery flows. Backtest and paper pass ``False`` so a symbol
-    with no real spot data raises :class:`NoSpotDataError` instead of silently
-    producing fabricated returns (v6 safety guard).
+    original share/gallery flows (spot only). Backtest and paper pass ``False`` so
+    a symbol with no real data raises instead of fabricating returns.
     """
     symbol = symbol.upper()
+    is_fut = market == "futures"
+    url = _FUT_KLINES if is_fut else _BASE
+    cache_symbol = f"{symbol}#FUT" if is_fut else symbol
     expected_days = max(1, (end_ms - start_ms) // _MS_DAY)
 
-    cached = _read_cache(symbol, interval, start_ms, end_ms)
+    cached = _read_cache(cache_symbol, interval, start_ms, end_ms)
     # Consider the cache usable if it covers most of the window.
     if len(cached) >= expected_days * 0.95:
         return cached, "cache"
 
     try:
-        raw = _fetch_binance(symbol, interval, start_ms, end_ms)
+        raw = _fetch_binance(symbol, interval, start_ms, end_ms, url=url)
         if raw:
-            _write_cache(symbol, interval, raw)
-            fresh = _read_cache(symbol, interval, start_ms, end_ms)
+            _write_cache(cache_symbol, interval, raw)
+            fresh = _read_cache(cache_symbol, interval, start_ms, end_ms)
             if len(fresh) > 0:
-                return fresh, "binance"
+                return fresh, "binance-futures" if is_fut else "binance"
     except Exception:
         pass  # fall through to cache/synthetic
 
     if len(cached) > 0:
         return cached, "cache"
+    if is_fut:
+        raise NoSpotDataError(NO_FUT_MSG)  # futures never fabricates
     if not allow_synthetic:
         raise NoSpotDataError(NO_SPOT_MSG)
     return _synthetic(symbol, start_ms, end_ms), "synthetic"
+
+
+# --- funding rates (futures) --------------------------------------------
+def get_funding_history(symbol: str, start_ms: int, end_ms: int) -> list[tuple[int, float]]:
+    """Historical USDT-M funding rates as ``[(fundingTime_ms, rate), ...]``.
+
+    Funding settles every 8h (three times a day). ``rate`` is the raw per-interval
+    fraction (e.g. 0.0001 == 0.01%). Returns [] on any error or missing market.
+    """
+    symbol = symbol.upper()
+    out: list[tuple[int, float]] = []
+    cursor = start_ms
+    try:
+        with httpx.Client(timeout=12.0) as client:
+            while cursor < end_ms:
+                resp = client.get(
+                    _FUT_FUNDING,
+                    params={"symbol": symbol, "startTime": cursor, "endTime": end_ms, "limit": 1000},
+                )
+                resp.raise_for_status()
+                batch = resp.json()
+                if not batch:
+                    break
+                for row in batch:
+                    out.append((int(row["fundingTime"]), float(row["fundingRate"])))
+                last = int(batch[-1]["fundingTime"])
+                if len(batch) < 1000:
+                    break
+                cursor = last + 1
+    except Exception:
+        return out  # partial/empty is fine; caller degrades gracefully
+    return out
+
+
+def average_daily_funding_pct(symbol: str, start_ms: int, end_ms: int) -> Optional[float]:
+    """Average *daily* funding cost as a positive percent, or None if unavailable.
+
+    Uses the mean absolute per-interval rate × 3 settlements/day × 100. Absolute
+    because the engine models funding as a one-sided holding COST (charged on
+    shorts); this yields a realistic magnitude to prefill instead of guessing.
+    """
+    hist = get_funding_history(symbol, start_ms, end_ms)
+    if not hist:
+        return None
+    mean_abs = sum(abs(r) for _, r in hist) / len(hist)
+    return round(mean_abs * 3.0 * 100.0, 4)
 
 
 def ensure_spot_available(symbol: str) -> None:

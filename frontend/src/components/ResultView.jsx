@@ -134,7 +134,8 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
 
       {dataSource && (
         <div className="text-xs text-slate-500">
-          데이터 소스: {dataSource}
+          데이터 소스: {dataSource === "binance-futures" ? "바이낸스 선물(USDT-M)" : dataSource}
+          {dataSource === "binance-futures" && " · 실제 선물 캔들"}
           {dataSource === "synthetic" && " (오프라인 폴백 · 합성 데이터)"}
         </div>
       )}

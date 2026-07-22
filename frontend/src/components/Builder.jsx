@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { RULE_TYPES, PERIOD_PRESETS, CANDLE_INTERVALS, MAX_LEVERAGE, withTypeDefaults } from "../lib/macro.js";
 import InfoTooltip from "./InfoTooltip.jsx";
+import { api } from "../api.js";
 import { quoteOf, fmtKrw } from "../lib/format.js";
 import { useUsdKrw } from "../lib/usdkrw.js";
 
@@ -47,6 +49,26 @@ export default function Builder({ form, setForm }) {
   const meta = RULE_TYPES[rt];
   const isShort = form.position_side === "short";
   const { rate: krwRate } = useUsdKrw();
+  const [fundingBusy, setFundingBusy] = useState(false);
+  const [fundingMsg, setFundingMsg] = useState("");
+
+  async function loadFunding() {
+    setFundingBusy(true);
+    setFundingMsg("");
+    try {
+      const d = await api.fundingRate(form.symbol.toUpperCase(), form.preset, form.start, form.end);
+      if (d.available && d.avg_daily_funding_pct != null) {
+        setForm((f) => ({ ...f, funding_pct: d.avg_daily_funding_pct }));
+        setFundingMsg(`실제 평균 펀딩비 적용: 일 ${d.avg_daily_funding_pct}%`);
+      } else {
+        setFundingMsg("이 종목은 선물 펀딩 데이터가 없어요 (현물 전용일 수 있음).");
+      }
+    } catch (e) {
+      setFundingMsg("펀딩비 조회 실패: " + String(e.message || e));
+    } finally {
+      setFundingBusy(false);
+    }
+  }
 
   // Field builders — plain functions (invoked, not JSX components) so inputs
   // keep focus across keystrokes. They close over the current `form`.
@@ -174,6 +196,28 @@ export default function Builder({ form, setForm }) {
           </div>
         );
       })()}
+
+      {/* price-data source (spot vs USDT-M futures) */}
+      {sel(
+        "market",
+        "데이터 소스 (market)",
+        [
+          { value: "auto", label: "자동 (숏·레버리지 → 선물, 그 외 현물)" },
+          { value: "spot", label: "현물 (spot)" },
+          { value: "futures", label: "선물 (USDT-M Futures)" },
+        ],
+        {
+          hint:
+            "실제 사용될 데이터: " +
+            (form.market === "spot"
+              ? "현물 캔들"
+              : form.market === "futures"
+              ? "선물 캔들 + 실제 펀딩비 반영 가능"
+              : isShort || Number(form.leverage) > 1
+              ? "선물 캔들 (숏/레버리지라 자동 선택)"
+              : "현물 캔들 (롱·1배라 자동 선택)"),
+        }
+      )}
 
       {/* rule-specific params */}
       <div className="rounded-xl border border-slate-200 p-4 space-y-4">
@@ -352,6 +396,19 @@ export default function Builder({ form, setForm }) {
           {num("commission_pct", "수수료 (%)", { term: "commission", step: "0.01" })}
           {num("slippage_pct", "슬리피지 (%)", { term: "slippage", step: "0.01" })}
           {num("funding_pct", "펀딩비/일 (숏, %)", { step: "0.01" })}
+        </div>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={loadFunding}
+            disabled={fundingBusy}
+            className="rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40 px-3 py-1.5 text-xs font-semibold"
+          >
+            {fundingBusy ? "불러오는 중…" : "⛽ 실제 펀딩비 불러오기"}
+          </button>
+          <span className="text-xs text-slate-500">
+            {fundingMsg || "선물 시장의 실제 평균 펀딩비(일)를 이 기간 기준으로 가져와 채워요."}
+          </span>
         </div>
       </details>
     </div>

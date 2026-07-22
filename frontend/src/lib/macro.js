@@ -81,6 +81,8 @@ export function defaultForm() {
     // leverage (backtest/paper only; 1 == spot, no liquidation)
     leverage: 1,
     margin_mode: "isolated",
+    // price-data source: auto(=선물 if 숏/레버리지, else 현물) | spot | futures
+    market: "auto",
     // A/B/C params
     take_profit_pct: 5,
     buy_price: 55000,
@@ -251,6 +253,7 @@ export function buildMacro(form) {
     candle_interval: form.candle_interval || "1d",
     leverage: rt === "C" ? 1 : Math.max(1, Math.round(num(form.leverage) || 1)),
     margin_mode: "isolated",
+    market: form.market || "auto",
     params: buildParams(rt, form),
     risk: {
       invest_ratio: num(form.invest_ratio_pct) / 100,
@@ -281,6 +284,7 @@ export function macroToForm(macro) {
   f.candle_interval = macro.candle_interval ?? "1d";
   f.leverage = macro.leverage ?? 1;
   f.margin_mode = macro.margin_mode ?? "isolated";
+  f.market = macro.market ?? "auto";
   Object.assign(f, macro.params); // param keys == form keys
   // null per_grid_invest / take_profit / ma_filter_period -> empty input
   ["per_grid_invest", "take_profit", "ma_filter_period"].forEach((k) => {
