@@ -235,6 +235,17 @@ def kimchi_premium(symbol: str = "BTC") -> dict:
     return kimchi_mod.get_premium(symbol)
 
 
+@app.get("/api/usdkrw")
+def usdkrw() -> dict:
+    """Approximate USD->KRW rate for showing KRW alongside USDT amounts.
+
+    Reference only — reuses the kimchi FX source (free API + fallback constant).
+    Amounts in this app are denominated in USDT; the returned rate lets the UI
+    render a rough KRW figure next to them for convenience.
+    """
+    return kimchi_mod.get_usdkrw()
+
+
 @app.get("/api/hangang-temp")
 def hangang_temp() -> dict:
     """'한강 수온' — proxy + server-cache the public Hangang temperature API.

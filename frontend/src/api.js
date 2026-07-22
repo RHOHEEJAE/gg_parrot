@@ -32,6 +32,9 @@ export const api = {
   // kimchi premium (reference indicator; upbit vs binance×USDKRW)
   kimchiPremium: (symbol) => req(`/api/kimchi-premium?symbol=${encodeURIComponent(symbol || "BTC")}`),
 
+  // approximate USD→KRW rate (reference only) for showing 원화 next to USDT amounts
+  usdKrw: () => req("/api/usdkrw"),
+
   // '오늘의 경주마' hot coins (server-cached, shared across clients)
   hotCoins: (limit) => req(`/api/hot-coins?limit=${limit || 10}`),
 

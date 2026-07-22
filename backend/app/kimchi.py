@@ -43,6 +43,21 @@ def supported_symbols() -> list[str]:
     return list(_MARKETS.keys())
 
 
+def get_usdkrw() -> dict:
+    """Current USD->KRW rate, for showing an approximate KRW value next to USDT.
+
+    Reference only (rough conversion, not a quote). Reuses the same free FX
+    source and in-memory cache as the kimchi premium; on failure it returns the
+    fallback constant with ``is_fallback`` set so the UI can flag it as a guess.
+    """
+    rate, is_fallback = _usdkrw()
+    return {
+        "usdkrw": round(rate, 2),
+        "is_fallback": is_fallback,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
 def _cached(key: str) -> Optional[float]:
     hit = _cache.get(key)
     if hit and hit[1] > time.time():

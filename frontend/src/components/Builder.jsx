@@ -1,8 +1,14 @@
 import { RULE_TYPES, PERIOD_PRESETS, CANDLE_INTERVALS, MAX_LEVERAGE, withTypeDefaults } from "../lib/macro.js";
 import InfoTooltip from "./InfoTooltip.jsx";
-import { quoteOf } from "../lib/format.js";
+import { quoteOf, fmtKrw } from "../lib/format.js";
+import { useUsdKrw } from "../lib/usdkrw.js";
 
-const money = (v, symbol) => `${Number(v || 0).toLocaleString("en-US")} ${quoteOf(symbol)}`;
+// USDT amount plus an approximate KRW reference (when a rate is available).
+const money = (v, symbol, rate) => {
+  const usdt = `${Number(v || 0).toLocaleString("en-US")} ${quoteOf(symbol)}`;
+  const krw = rate ? fmtKrw(v, rate) : "";
+  return krw ? `${usdt} · ${krw}` : usdt;
+};
 
 // Live risk read-out for a chosen leverage. Price move to liquidation ≈ 100/N %.
 function leverageRisk(lev) {
@@ -40,6 +46,7 @@ export default function Builder({ form, setForm }) {
   const rt = form.rule_type;
   const meta = RULE_TYPES[rt];
   const isShort = form.position_side === "short";
+  const { rate: krwRate } = useUsdKrw();
 
   // Field builders — plain functions (invoked, not JSX components) so inputs
   // keep focus across keystrokes. They close over the current `form`.
@@ -65,13 +72,13 @@ export default function Builder({ form, setForm }) {
     </label>
   );
   const cap = num("initial_capital", `초기 자본 initial_capital (${quoteOf(form.symbol)})`, {
-    hint: money(form.initial_capital, form.symbol),
+    hint: money(form.initial_capital, form.symbol, krwRate),
   });
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
-        <Field label="종목 (symbol)" hint={`금액 단위: ${quoteOf(form.symbol)} (달러 기준, 원화 아님)`}>
+        <Field label="종목 (symbol)" hint={`금액 단위: ${quoteOf(form.symbol)} (달러 기준) · 원화(≈)는 참고용 근사치`}>
           <input className={inputCls} value={form.symbol} onChange={set("symbol")} />
         </Field>
         <Field label="규칙 타입 (전략)" term={`strat_${rt}`}>
@@ -187,7 +194,7 @@ export default function Builder({ form, setForm }) {
         )}
         {rt === "C" && (
           <div className="grid grid-cols-2 gap-4">
-            {num("amount_per_buy", `1회 매수액 amount_per_buy (${quoteOf(form.symbol)})`, { term: "dca", hint: money(form.amount_per_buy, form.symbol) })}
+            {num("amount_per_buy", `1회 매수액 amount_per_buy (${quoteOf(form.symbol)})`, { term: "dca", hint: money(form.amount_per_buy, form.symbol, krwRate) })}
             {num("interval_days", "매수 주기 interval_days (일)", { term: "dca" })}
           </div>
         )}

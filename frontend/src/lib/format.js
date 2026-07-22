@@ -55,6 +55,28 @@ export function fmtMoneyCompact(value, symbol) {
   return `${s} ${q}`;
 }
 
+// Approximate KRW for a USDT amount, e.g. "≈ 138만원". REFERENCE ONLY — the app
+// is denominated in USDT; this is a rough convenience conversion at `rate`
+// (USD→KRW). Returns "" when the rate is missing so callers can skip rendering.
+export function fmtKrw(usdtValue, rate) {
+  const won = Number(usdtValue) * Number(rate);
+  if (!isFinite(won) || !isFinite(Number(rate)) || Number(rate) <= 0) return "";
+  return `≈ ${krwShort(won)}`;
+}
+
+// Compact Korean money with 만/억 units so big amounts stay readable.
+function krwShort(won) {
+  const sign = won < 0 ? "-" : "";
+  const abs = Math.abs(won);
+  if (abs >= 1e8) {
+    return `${sign}${(abs / 1e8).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}억원`;
+  }
+  if (abs >= 1e4) {
+    return `${sign}${(abs / 1e4).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만원`;
+  }
+  return `${sign}${Math.round(abs).toLocaleString("ko-KR")}원`;
+}
+
 // Coin quantity (with the coin ticker), e.g. "130,396,720.22 VANRY".
 export function fmtQty(qty, symbol) {
   const n = Number(qty);

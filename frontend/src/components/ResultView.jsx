@@ -1,9 +1,10 @@
 import EquityChart from "./EquityChart.jsx";
 import SimBadge from "./SimBadge.jsx";
 import InfoTooltip from "./InfoTooltip.jsx";
-import { fmtMoney, fmtMoneyCompact } from "../lib/format.js";
+import { fmtMoney, fmtMoneyCompact, fmtKrw } from "../lib/format.js";
+import { useUsdKrw } from "../lib/usdkrw.js";
 
-function Stat({ label, value, term, color = "text-slate-900", title }) {
+function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   return (
     <div className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3 min-w-0">
       <div className="flex items-center text-xs text-slate-500">
@@ -11,6 +12,7 @@ function Stat({ label, value, term, color = "text-slate-900", title }) {
         {term && <InfoTooltip term={term} />}
       </div>
       <div className={"text-2xl font-bold truncate " + color} title={title}>{value}</div>
+      {sub && <div className="text-xs text-slate-500 truncate" title={sub}>{sub}</div>}
     </div>
   );
 }
@@ -23,6 +25,7 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
   const sign = up ? "+" : "";
   const levered = leverage > 1;
   const liq = r.liquidation_count || 0;
+  const { rate: krwRate } = useUsdKrw();
 
   return (
     <div className="space-y-5">
@@ -46,7 +49,11 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
           </div>
           <div className="mt-1 text-sm text-red-700">
             레버리지 {leverage}배로 인해 청산으로 잃은 금액{" "}
-            <b>{fmtMoney(r.liquidated_loss || 0, symbol)}</b>. 레버리지는 가격이 조금만 반대로 움직여도
+            <b>{fmtMoney(r.liquidated_loss || 0, symbol)}</b>
+            {fmtKrw(r.liquidated_loss || 0, krwRate) && (
+              <span className="font-normal"> ({fmtKrw(r.liquidated_loss || 0, krwRate)})</span>
+            )}
+            . 레버리지는 가격이 조금만 반대로 움직여도
             투입 증거금을 전부 잃게 만듭니다.
             <InfoTooltip term="liquidation" />
           </div>
@@ -68,7 +75,7 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
         <Stat label="승률" term="win_rate" value={`${r.win_rate_pct.toFixed(1)}%`} />
         <Stat label="MDD (최대낙폭)" term="mdd" value={`-${r.mdd_pct.toFixed(1)}%`} color="text-red-600" />
         <Stat label="총 매매 횟수" value={r.total_trades} />
-        <Stat label="최종 평가금액" value={fmtMoneyCompact(r.final_equity, symbol)} title={fmtMoney(r.final_equity, symbol)} />
+        <Stat label="최종 평가금액" value={fmtMoneyCompact(r.final_equity, symbol)} title={fmtMoney(r.final_equity, symbol)} sub={fmtKrw(r.final_equity, krwRate)} />
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-6">

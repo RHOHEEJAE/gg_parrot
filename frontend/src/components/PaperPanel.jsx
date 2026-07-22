@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import InfoTooltip from "./InfoTooltip.jsx";
-import { baseOf, fmtMoney, fmtMoneyCompact, fmtPrice, fmtQty, quoteOf } from "../lib/format.js";
+import { baseOf, fmtMoney, fmtMoneyCompact, fmtKrw, fmtPrice, fmtQty, quoteOf } from "../lib/format.js";
+import { useUsdKrw } from "../lib/usdkrw.js";
 
 const SIDE_KO = { buy: "매수", sell: "매도", short: "숏 진입", cover: "숏 청산" };
 const SIDE_COLOR = {
@@ -27,6 +28,7 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [startedMacro, setStartedMacro] = useState(null); // macro snapshot the running session was started with
+  const { rate: krwRate } = useUsdKrw();
   const pollRef = useRef(null);
 
   function stopPolling() {
@@ -198,7 +200,7 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
       )}
 
       <p className="text-xs text-slate-500">
-        💵 금액 단위는 <b>{quoteOf(macro.symbol)}</b>(미국 달러 기준, 원화 아님) · 수량 단위는 코인 개수({baseOf(macro.symbol)})입니다.
+        💵 금액 단위는 <b>{quoteOf(macro.symbol)}</b>(미국 달러 기준) · 원화(≈)는 참고용 근사치 · 수량 단위는 코인 개수({baseOf(macro.symbol)})입니다.
       </p>
 
       {valErr && <div className="text-sm text-amber-700">{valErr}</div>}
@@ -212,6 +214,9 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
             <div className="text-2xl font-bold truncate" title={fmtMoney(status.current_equity, macro.symbol)}>
               {fmtMoneyCompact(status.current_equity, macro.symbol)}
             </div>
+            {fmtKrw(status.current_equity, krwRate) && (
+              <div className="text-xs text-slate-500 truncate">{fmtKrw(status.current_equity, krwRate)}</div>
+            )}
           </div>
           <div className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3">
             <div className="text-xs text-slate-500">현재 수익률</div>
@@ -262,7 +267,9 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
         <div className="rounded-xl border-2 border-red-400 bg-red-50 p-4 text-red-700">
           <div className="font-extrabold">⚠️ {status.liquidations}번 청산됨 (전액 손실)</div>
           <div className="text-sm mt-1">
-            청산으로 잃은 금액 <b>{fmtMoney(status.liquidated_loss || 0, macro.symbol)}</b> · 레버리지 {macro.leverage}배의
+            청산으로 잃은 금액 <b>{fmtMoney(status.liquidated_loss || 0, macro.symbol)}</b>
+            {fmtKrw(status.liquidated_loss || 0, krwRate) && <span> ({fmtKrw(status.liquidated_loss || 0, krwRate)})</span>}
+            {" "}· 레버리지 {macro.leverage}배의
             위험을 모의로 확인했습니다.
           </div>
         </div>
