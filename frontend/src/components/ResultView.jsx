@@ -27,6 +27,11 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
   const liq = r.liquidation_count || 0;
   const { rate: krwRate } = useUsdKrw();
 
+  // Buy&Hold baseline comparison (null when the engine couldn't define it).
+  const bh = r.buy_hold_return_pct != null ? r.buy_hold_return_pct : null;
+  const vsHold = bh !== null ? r.final_return_pct - bh : 0;
+  const beatHold = vsHold >= 0;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -69,6 +74,27 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
           {sign}
           {r.final_return_pct.toFixed(2)}%
         </div>
+        {bh !== null && (
+          <div className="mt-3 flex items-center flex-wrap gap-2 text-sm">
+            <span className="text-slate-500">
+              그냥 홀딩(HODL)했다면{" "}
+              <b className={bh >= 0 ? "text-green-600" : "text-red-600"}>
+                {bh >= 0 ? "+" : ""}{bh.toFixed(2)}%
+              </b>
+            </span>
+            <span
+              className={
+                "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold " +
+                (beatHold
+                  ? "border-green-300 bg-green-50 text-green-700"
+                  : "border-red-300 bg-red-50 text-red-700")
+              }
+            >
+              {beatHold ? "▲ 홀딩보다" : "▼ 홀딩보다"} {vsHold >= 0 ? "+" : ""}
+              {vsHold.toFixed(2)}%p {beatHold ? "초과" : "미달"}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -76,6 +102,23 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
         <Stat label="MDD (최대낙폭)" term="mdd" value={`-${r.mdd_pct.toFixed(1)}%`} color="text-red-600" />
         <Stat label="총 매매 횟수" value={r.total_trades} />
         <Stat label="최종 평가금액" value={fmtMoneyCompact(r.final_equity, symbol)} title={fmtMoney(r.final_equity, symbol)} sub={fmtKrw(r.final_equity, krwRate)} />
+        <Stat
+          label="샤프지수"
+          term="sharpe"
+          value={r.sharpe != null ? r.sharpe.toFixed(2) : "—"}
+          color={r.sharpe != null && r.sharpe >= 1 ? "text-green-600" : "text-slate-900"}
+        />
+        <Stat
+          label="손익비 (PF)"
+          term="profit_factor"
+          value={r.profit_factor != null ? r.profit_factor.toFixed(2) : "—"}
+          color={r.profit_factor != null && r.profit_factor >= 1 ? "text-green-600" : "text-slate-900"}
+        />
+        <Stat
+          label="최대 연속손절"
+          value={`${r.max_consecutive_losses || 0}회`}
+          color={(r.max_consecutive_losses || 0) >= 5 ? "text-red-600" : "text-slate-900"}
+        />
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-6">

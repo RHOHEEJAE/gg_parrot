@@ -17,6 +17,7 @@ Execution assumptions (also documented in README):
 """
 from __future__ import annotations
 
+import math
 from typing import List, Optional
 
 import pandas as pd
@@ -48,9 +49,74 @@ class BacktestResult(BaseModel):
     # when leverage == 1 (no liquidation).
     liquidation_count: int = 0
     liquidated_loss: float = 0.0
+    # --- benchmark & risk-adjusted metrics --------------------------------
+    # "그냥 홀딩" baseline: the coin's own return over the same window (buy at the
+    # first close, hold to the last). Lets the UI show strategy vs HODL. None
+    # when there are too few bars to define it.
+    buy_hold_return_pct: Optional[float] = None
+    # Annualized Sharpe ratio from the equity curve's per-bar returns (risk-free
+    # rate assumed 0). None when the curve is flat or too short to be meaningful.
+    sharpe: Optional[float] = None
+    # Profit factor = gross profit / gross loss across closed trades. None when
+    # there were no losing trades (or no closed trades) to divide by.
+    profit_factor: Optional[float] = None
+    # Longest run of consecutive losing trades (a streak-risk read-out).
+    max_consecutive_losses: int = 0
 
 
 # Fill-price / execution logic lives in stepper.py (shared with paper trading).
+
+# Bars per year per candle interval, used to annualize the Sharpe ratio.
+_PERIODS_PER_YEAR: dict[str, float] = {
+    "1m": 525_600.0,
+    "5m": 105_120.0,
+    "15m": 35_040.0,
+    "1h": 8_760.0,
+    "4h": 2_190.0,
+    "1d": 365.0,
+}
+
+
+def _sharpe(equity_curve: List[EquityPoint], periods_per_year: float) -> Optional[float]:
+    """Annualized Sharpe from per-bar equity returns (risk-free rate = 0).
+
+    None when the curve is too short or perfectly flat (std == 0), where the
+    ratio is undefined rather than zero.
+    """
+    rets: List[float] = []
+    for i in range(1, len(equity_curve)):
+        prev = equity_curve[i - 1].equity
+        if prev > 0:
+            rets.append(equity_curve[i].equity / prev - 1.0)
+    if len(rets) < 2:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+    std = math.sqrt(var)
+    if std <= 0:
+        return None
+    return round(mean / std * math.sqrt(periods_per_year), 3)
+
+
+def _profit_factor(closed_trades: List[float]) -> Optional[float]:
+    """Gross profit / gross loss over closed trades; None if there is no loss."""
+    gross_profit = sum(p for p in closed_trades if p > 0)
+    gross_loss = -sum(p for p in closed_trades if p < 0)
+    if gross_loss <= 0:
+        return None
+    return round(gross_profit / gross_loss, 3)
+
+
+def _max_consecutive_losses(closed_trades: List[float]) -> int:
+    """Longest run of consecutive losing (PnL < 0) trades."""
+    worst = run = 0
+    for p in closed_trades:
+        if p < 0:
+            run += 1
+            worst = max(worst, run)
+        else:
+            run = 0
+    return worst
 
 
 def _metrics(
@@ -63,6 +129,8 @@ def _metrics(
     same_bar_sl_bars: int = 0,
     liquidation_count: int = 0,
     liquidated_loss: float = 0.0,
+    buy_hold_return_pct: Optional[float] = None,
+    periods_per_year: float = 365.0,
 ) -> BacktestResult:
     final_equity = equity_curve[-1].equity if equity_curve else initial_capital
     final_return_pct = (final_equity - initial_capital) / initial_capital * 100.0
@@ -98,7 +166,21 @@ def _metrics(
         same_bar_sl_bars=same_bar_sl_bars,
         liquidation_count=liquidation_count,
         liquidated_loss=round(liquidated_loss, 2),
+        buy_hold_return_pct=(round(buy_hold_return_pct, 4) if buy_hold_return_pct is not None else None),
+        sharpe=_sharpe(equity_curve, periods_per_year),
+        profit_factor=_profit_factor(closed_trades),
+        max_consecutive_losses=_max_consecutive_losses(closed_trades),
     )
+
+
+def _buy_hold_return_pct(closes) -> Optional[float]:
+    """Coin's own return over the window: buy at first close, hold to last."""
+    if len(closes) < 2:
+        return None
+    first, last = float(closes[0]), float(closes[-1])
+    if first <= 0:
+        return None
+    return (last - first) / first * 100.0
 
 
 def _iso(ts) -> str:
@@ -125,6 +207,8 @@ def _run_single_position(macro: Macro, df: pd.DataFrame) -> BacktestResult:
         sim.initial_capital,
         liquidation_count=sim.liquidations,
         liquidated_loss=sim.liquidated_loss,
+        buy_hold_return_pct=_buy_hold_return_pct(closes),
+        periods_per_year=_PERIODS_PER_YEAR.get(macro.candle_interval, 365.0),
     )
 
 
@@ -162,6 +246,8 @@ def _run_dca(macro: Macro, df: pd.DataFrame) -> BacktestResult:
         total_trades=num_buys,
         initial_capital=initial_capital,
         win_rate_override=win_rate,
+        buy_hold_return_pct=_buy_hold_return_pct(closes),
+        periods_per_year=_PERIODS_PER_YEAR.get(macro.candle_interval, 365.0),
     )
 
 
@@ -193,6 +279,8 @@ def _run_candle_engine(macro: Macro, df: pd.DataFrame) -> BacktestResult:
         same_bar_sl_bars=sim.same_bar_sl,
         liquidation_count=sim.liquidations,
         liquidated_loss=sim.liquidated_loss,
+        buy_hold_return_pct=_buy_hold_return_pct(closes),
+        periods_per_year=_PERIODS_PER_YEAR.get(macro.candle_interval, 365.0),
     )
 
 

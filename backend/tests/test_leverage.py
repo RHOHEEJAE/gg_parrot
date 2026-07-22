@@ -133,7 +133,9 @@ def test_candle_leverage_1_regression():
     params = {"entry_mode": "immediate", "activation_profit": 5, "trail_percent": 3,
               "initial_capital": 1000.0}
     df = ohlc_df([(100, 101, 99, 100), (101, 108, 100, 107), (107, 109, 104, 105)])
-    spot = run_backtest(macro("E", "long", params, leverage=1), df)
+    # Same candle_interval on both so the equality is purely about leverage
+    # (interval only affects the Sharpe annualization, not the equity curve).
+    spot = run_backtest(macro("E", "long", params, leverage=1, interval="1h"), df)
     # A macro with leverage omitted (defaults to 1) must match leverage=1 exactly.
     plain = run_backtest(
         Macro(symbol="BTCUSDT", rule_type="E", candle_interval="1h", params=params,
