@@ -4,6 +4,7 @@ import Builder from "../components/Builder.jsx";
 import ResultView from "../components/ResultView.jsx";
 import SimBadge from "../components/SimBadge.jsx";
 import PaperPanel from "../components/PaperPanel.jsx";
+import CandleChart from "../components/CandleChart.jsx";
 import OptimizePanel from "../components/OptimizePanel.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import { api } from "../api.js";
@@ -175,6 +176,14 @@ export default function Studio() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">결과</h2>
         </div>
+
+        {/* Live chart of whatever symbol is in the builder — gives the panel
+            something useful before a backtest has ever been run. */}
+        {form.symbol && (
+          <div className="mb-6">
+            <CandleChart symbol={form.symbol.toUpperCase()} />
+          </div>
+        )}
 
         {!result && !busy && (
           <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-slate-500">

@@ -5,6 +5,7 @@ from .binance import (
     ensure_spot_available,
     get_funding_history,
     get_klines,
+    get_recent_klines,
     get_ticker_price,
     get_ticker_price_cached,
     resolve_period,
@@ -12,6 +13,7 @@ from .binance import (
 
 __all__ = [
     "get_klines",
+    "get_recent_klines",
     "get_ticker_price",
     "get_ticker_price_cached",
     "get_funding_history",

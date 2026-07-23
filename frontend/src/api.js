@@ -59,6 +59,13 @@ export const api = {
   // [차후 도입] '고래 동향' — 서버 라우트가 아직 꺼져 있어 지금 호출하면 404 입니다.
   whaleActivity: () => req("/api/whale-activity"),
 
+  // 실시간 봉차트용 최근 캔들 (서버 캐시; 마지막 봉은 진행 중이라 closed=false)
+  candles: (symbol, interval, limit) =>
+    req(
+      `/api/candles?symbol=${encodeURIComponent(symbol)}` +
+        `&interval=${encodeURIComponent(interval || "1m")}&limit=${limit || 120}`
+    ),
+
   // 오늘의 리더보드 (daily KST paper-return board)
   leaderboard: (userId) => req(`/api/leaderboard?user_id=${encodeURIComponent(userId || "")}`),
   leaderboardRegister: (macro, username, password, userId, mode) =>

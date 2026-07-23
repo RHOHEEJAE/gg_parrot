@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import select
 
+from . import chart as chart_mod
 from . import chat as chat_mod
 from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
@@ -307,6 +308,28 @@ def hangang_temp() -> dict:
     cache or ok:false) so the page never breaks on an upstream failure.
     """
     return hangang_mod.get_temp()
+
+
+@app.get("/api/candles")
+def candles(
+    symbol: str,
+    interval: str = chart_mod.DEFAULT_INTERVAL,
+    limit: int = 120,
+    market: str = "spot",
+) -> dict:
+    """Recent OHLC candles for the live chart (public market data only).
+
+    Globally cached per (symbol, interval, limit, market) for a few seconds, so
+    many viewers collapse into at most one upstream call per window. The last
+    candle is the in-progress bar (``closed: false``) and is never persisted to
+    the shared kline cache, so it can't leak into a backtest.
+    """
+    try:
+        return chart_mod.get_candles(symbol, interval=interval, limit=limit, market=market)
+    except NoSpotDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/hot-coins")

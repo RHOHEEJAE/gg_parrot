@@ -255,6 +255,53 @@ def get_klines(
     return _synthetic(symbol, start_ms, end_ms), "synthetic"
 
 
+# --- live klines (chart) -------------------------------------------------
+# The historical path above is deliberately cache-first: once a window is
+# covered it never re-hits Binance, and _write_cache stores whatever came back —
+# including the still-forming last bar. That is right for backtests (settled
+# bars only) but would freeze a live chart, so the chart uses its own path that
+# ALWAYS refetches and NEVER persists the in-progress bar.
+def get_recent_klines(
+    symbol: str, interval: str = "1m", limit: int = 120, *, market: str = "spot"
+) -> list[dict]:
+    """Most recent ``limit`` klines, newest last, for the live chart.
+
+    The final element is the *in-progress* candle (its close/high/low still move).
+    Only settled bars are written to the shared cache; the open bar is returned
+    but never stored, so no stale candle can leak into a backtest later.
+    """
+    symbol = symbol.upper()
+    is_fut = market == "futures"
+    url = _FUT_KLINES if is_fut else _BASE
+    limit = max(2, min(int(limit), 1000))
+
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.get(url, params={"symbol": symbol, "interval": interval, "limit": limit})
+        resp.raise_for_status()
+        raw = resp.json()
+    if not isinstance(raw, list) or not raw:
+        raise NoSpotDataError(NO_FUT_MSG if is_fut else NO_SPOT_MSG)
+
+    # Binance marks a bar closed when now >= closeTime (raw[6]).
+    now_ms = int(time.time() * 1000)
+    settled = [k for k in raw if int(k[6]) <= now_ms]
+    if settled:
+        _write_cache(f"{symbol}#FUT" if is_fut else symbol, interval, settled)
+
+    return [
+        {
+            "t": int(k[0]),  # open time (ms)
+            "o": float(k[1]),
+            "h": float(k[2]),
+            "l": float(k[3]),
+            "c": float(k[4]),
+            "v": float(k[5]),
+            "closed": int(k[6]) <= now_ms,
+        }
+        for k in raw
+    ]
+
+
 # --- funding rates (futures) --------------------------------------------
 def get_funding_history(symbol: str, start_ms: int, end_ms: int) -> list[tuple[int, float]]:
     """Historical USDT-M funding rates as ``[(fundingTime_ms, rate), ...]``.
