@@ -4,7 +4,9 @@ import Leaderboard from "./pages/Leaderboard.jsx";
 import SimBadge from "./components/SimBadge.jsx";
 import KimchiBanner from "./components/KimchiBanner.jsx";
 import HangangTempBanner from "./components/HangangTempBanner.jsx";
-import WhaleBanner from "./components/WhaleBanner.jsx";
+// [차후 도입] 고래 동향 배너 — 거래소/컨트랙트 지갑 노이즈 정리 후 켤 예정.
+// 컴포넌트와 백엔드(app/whales.py)는 그대로 두고 마운트만 꺼둡니다.
+// import WhaleBanner from "./components/WhaleBanner.jsx";
 import HotCoinsMarquee from "./components/HotCoinsMarquee.jsx";
 
 function Nav() {
@@ -39,7 +41,7 @@ export default function App() {
       <Nav />
       <KimchiBanner />
       <HangangTempBanner />
-      <WhaleBanner />
+      {/* [차후 도입] <WhaleBanner /> */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         <Routes>
           <Route path="/" element={<Studio />} />

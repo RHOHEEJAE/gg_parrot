@@ -1,5 +1,13 @@
 """'고래 동향' — on-chain top-holder flow (reference indicator only, NOT a signal).
 
+[차후 도입 / 현재 비활성화]
+    상위 보유자 목록에 거래소·컨트랙트·브리지 지갑이 많이 섞여 있어 신호 신뢰도가
+    낮다고 판단, 노출을 보류했습니다. ``_DENYLIST_BASE`` 주소 라벨링을 충분히
+    보강한 뒤 ``main.py`` 의 /api/whale-activity 라우트와 프론트의 <WhaleBanner />
+    를 함께 되살리면 그대로 동작합니다. 순수 로직은 tests/test_whales.py 로 계속
+    검증되고 있어 방치되어 썩지 않습니다.
+
+
 Ported from the standalone `coin_active` collector, but self-contained: GGparrot
 fetches the top holders itself and diffs them against the previous observation
 stored in SQLite, so there is no dependency on an external daemon or Supabase.

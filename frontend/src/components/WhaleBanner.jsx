@@ -1,3 +1,6 @@
+// [차후 도입 / 현재 미마운트] 고래 동향 배너.
+// App.jsx 에서 마운트를 꺼둔 상태입니다. 백엔드 라우트(/api/whale-activity)도 함께
+// 주석 처리돼 있으니, 되살릴 때는 양쪽을 같이 켜세요. 자세한 배경은 app/whales.py 참고.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
