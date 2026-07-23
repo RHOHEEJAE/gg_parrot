@@ -99,6 +99,29 @@ class PaperTrade(SQLModel, table=True):
     return_at_trade: float
 
 
+class WhaleHolderBalance(SQLModel, table=True):
+    """Last observed on-chain balance of one top-holder wallet ('고래 동향').
+
+    Diffed against the next observation to classify a wallet as buying/selling.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    coin: str = Field(index=True)  # PEPE | WETH | XRP
+    wallet: str = Field(index=True)
+    balance_raw: str
+    updated_at: str
+
+
+class WhaleObservation(SQLModel, table=True):
+    """Latest whale-flow summary per coin (also marks when we last observed)."""
+
+    coin: str = Field(primary_key=True)
+    observed_at: str
+    buys: int = 0
+    sells: int = 0
+    tracked: int = 0
+
+
 def _migrate() -> None:
     """Add columns introduced after a table was first created (SQLite create_all
     does not ALTER existing tables). Idempotent and safe to run every startup."""

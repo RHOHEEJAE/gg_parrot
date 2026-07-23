@@ -56,6 +56,9 @@ export const api = {
   // 한강 수온 (server-cached proxy of the public Hangang temperature API)
   hangangTemp: () => req("/api/hangang-temp"),
 
+  // '고래 동향' — on-chain top-holder buy/sell flow (server-cached, reference only)
+  whaleActivity: () => req("/api/whale-activity"),
+
   // 오늘의 리더보드 (daily KST paper-return board)
   leaderboard: (userId) => req(`/api/leaderboard?user_id=${encodeURIComponent(userId || "")}`),
   leaderboardRegister: (macro, username, password, userId, mode) =>

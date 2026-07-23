@@ -4,6 +4,7 @@ import Leaderboard from "./pages/Leaderboard.jsx";
 import SimBadge from "./components/SimBadge.jsx";
 import KimchiBanner from "./components/KimchiBanner.jsx";
 import HangangTempBanner from "./components/HangangTempBanner.jsx";
+import WhaleBanner from "./components/WhaleBanner.jsx";
 import HotCoinsMarquee from "./components/HotCoinsMarquee.jsx";
 
 function Nav() {
@@ -38,6 +39,7 @@ export default function App() {
       <Nav />
       <KimchiBanner />
       <HangangTempBanner />
+      <WhaleBanner />
       <main className="max-w-6xl mx-auto px-4 py-8">
         <Routes>
           <Route path="/" element={<Studio />} />

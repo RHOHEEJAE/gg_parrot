@@ -24,6 +24,7 @@ from . import kimchi as kimchi_mod
 from . import leaderboard as leaderboard_mod
 from . import optimize as optimize_mod
 from . import paper as paper_mod
+from . import whales as whales_mod
 from .card import render_card
 from .security import hash_password
 from .data import NoSpotDataError, average_daily_funding_pct, get_klines, resolve_period
@@ -315,6 +316,17 @@ def hot_coins(limit: int = 10) -> dict:
     of client count. Reference indicator only — never a trading signal.
     """
     return hotcoins_mod.get_hot_coins(limit)
+
+
+@app.get("/api/whale-activity")
+def whale_activity() -> dict:
+    """'고래 동향' — on-chain top-holder buy/sell flow (reference only).
+
+    Server-cached per coin so the upstream explorers are hit at most once per
+    window regardless of client count. Degrades gracefully: a coin that fails to
+    refresh is served stale or omitted, never breaking the page.
+    """
+    return whales_mod.get_whale_activity()
 
 
 @app.get("/api/gallery")
