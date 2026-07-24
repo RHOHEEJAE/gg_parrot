@@ -64,7 +64,7 @@ export default function HotCoinsMarquee() {
     coins.map((c) => <Item key={(hidden ? "b-" : "a-") + c.symbol} coin={c} onPick={pick} ariaHidden={hidden} />);
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+    <div className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-200 bg-surface/95 backdrop-blur">
       <div className="flex items-center">
         <div className="shrink-0 px-3 py-2 text-sm font-bold text-amber-700 border-r border-slate-200 flex items-center gap-1">
           🐎 <span className="hidden sm:inline">오늘의 경주마</span>

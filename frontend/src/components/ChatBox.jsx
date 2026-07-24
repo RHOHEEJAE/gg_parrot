@@ -52,7 +52,7 @@ export default function ChatBox() {
   }
 
   return (
-    <div className="mt-10 rounded-2xl bg-white border border-slate-200 p-5">
+    <div className="mt-10 rounded-2xl bg-surface border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-base font-semibold">💬 리더보드 채팅</h3>
         <span className="text-[11px] text-slate-500">매일 KST 00:00 초기화</span>

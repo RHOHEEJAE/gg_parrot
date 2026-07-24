@@ -19,8 +19,11 @@ export default function EquityChart({ curve }) {
   const area = `${line} L${x(n - 1).toFixed(1)},${H - pad.b} L${x(0).toFixed(1)},${H - pad.b} Z`;
 
   const up = values[n - 1] >= values[0];
-  const stroke = up ? "#22c55e" : "#ef4444";
-  const fill = up ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)";
+  // Theme-aware (see index.css): the vars hold bare "R G B" triplets, so the
+  // same value serves both the solid stroke and the translucent area fill.
+  const rgb = up ? "var(--chart-up)" : "var(--chart-down)";
+  const stroke = `rgb(${rgb})`;
+  const fill = `rgb(${rgb} / 0.12)`;
 
   const first = curve[0].t.slice(0, 10);
   const last = curve[n - 1].t.slice(0, 10);

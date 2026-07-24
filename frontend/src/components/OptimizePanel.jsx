@@ -5,13 +5,20 @@ import InfoTooltip from "./InfoTooltip.jsx";
 
 // Green→red heat color for a return% relative to the grid's [min,max] range.
 // Mid (0-ish within range) stays pale so extremes read clearly.
+//
+// Saturation/lightness come from CSS vars (see index.css) so the scale inverts
+// with the theme — the cell label is `text-slate-800`, which goes light in dark
+// mode and would otherwise sit on a near-white swatch. Using vars (rather than
+// reading the theme in JS) also means the grid repaints on toggle for free.
 function heatStyle(value, min, max) {
-  if (max <= min) return { background: "#f1f5f9" };
+  if (max <= min) return { background: "rgb(var(--c-slate-100))" };
   const t = (value - min) / (max - min); // 0 = worst, 1 = best
   // interpolate red(0) -> amber(0.5) -> green(1)
   const hue = 0 + t * 130; // 0=red .. 130=green
-  const light = 92 - Math.abs(t - 0.5) * 18; // a touch deeper toward the extremes
-  return { background: `hsl(${hue}, 70%, ${light}%)` };
+  const dip = (Math.abs(t - 0.5) * 18).toFixed(1); // deeper toward the extremes
+  return {
+    background: `hsl(${hue} var(--heat-s) calc(var(--heat-l) - ${dip}%))`,
+  };
 }
 
 export default function OptimizePanel({ form, setForm, valErr }) {
@@ -50,7 +57,7 @@ export default function OptimizePanel({ form, setForm, valErr }) {
   const isBest = (tp, sl) => data?.best && data.best.tp === tp && data.best.sl === sl;
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-4">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-5 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center text-sm font-semibold text-slate-700">
           🔍 익절 / 손절 자동 최적화
@@ -78,7 +85,7 @@ export default function OptimizePanel({ form, setForm, valErr }) {
             <table className="border-collapse text-xs">
               <thead>
                 <tr>
-                  <th className="p-1.5 text-slate-400 font-medium sticky left-0 bg-white">손절＼익절</th>
+                  <th className="p-1.5 text-slate-400 font-medium sticky left-0 bg-surface">손절＼익절</th>
                   {data.tp_values.map((tp) => (
                     <th key={tp} className="p-1.5 text-slate-500 font-medium text-center">
                       {tp}%
@@ -89,7 +96,7 @@ export default function OptimizePanel({ form, setForm, valErr }) {
               <tbody>
                 {data.sl_values.map((sl) => (
                   <tr key={sl}>
-                    <td className="p-1.5 text-slate-500 font-medium sticky left-0 bg-white">{sl}%</td>
+                    <td className="p-1.5 text-slate-500 font-medium sticky left-0 bg-surface">{sl}%</td>
                     {data.tp_values.map((tp) => {
                       const c = cellAt(tp, sl);
                       if (!c) return <td key={tp} />;

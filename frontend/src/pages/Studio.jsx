@@ -209,7 +209,7 @@ export default function Studio() {
         )}
 
         {share && (
-          <div className="mt-6 rounded-2xl bg-white border border-slate-200 p-5 space-y-4">
+          <div className="mt-6 rounded-2xl bg-surface border border-slate-200 p-5 space-y-4">
             <div className="text-sm font-semibold text-slate-700">공유 & 인증 카드</div>
             <div className="flex gap-2">
               <input readOnly value={share.url} className="flex-1 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm" />

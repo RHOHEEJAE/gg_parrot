@@ -29,7 +29,7 @@ function CoinChip({ c, onPick }) {
     <button
       onClick={() => onPick(c.symbol)}
       title={`${c.name} 상위 ${c.tracked}개 지갑 기준 · 이 종목으로 매크로 만들기`}
-      className="flex items-center gap-1.5 rounded-full border border-cyan-200 bg-white/70 px-2.5 py-0.5 hover:bg-white transition-colors"
+      className="flex items-center gap-1.5 rounded-full border border-cyan-200 bg-surface/70 px-2.5 py-0.5 hover:bg-surface transition-colors"
     >
       <span className="font-semibold text-slate-700">{c.name}</span>
       <span className="text-green-600 tabular-nums">▲{c.buys}</span>

@@ -112,7 +112,7 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
     running && startedMacro && JSON.stringify(startedMacro) !== JSON.stringify(macro);
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-6 space-y-5">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-lg font-semibold">페이퍼 트레이딩 (실시간 모의매매)</h3>
         <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
           <button
             onClick={stop}
             disabled={busy}
-            className="rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 px-5 py-2.5 font-semibold text-white"
+            className="rounded-lg bg-danger hover:bg-danger-hover disabled:opacity-40 px-5 py-2.5 font-semibold text-white"
           >
             ■ 중지
           </button>

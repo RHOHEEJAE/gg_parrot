@@ -71,7 +71,7 @@ export default function Leaderboard() {
       </div>
 
       {/* countdown + register */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-white border border-slate-200 px-5 py-4">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-surface border border-slate-200 px-5 py-4">
         <div className="text-sm text-slate-700">
           리더보드 초기화까지{" "}
           <span className="font-bold tabular-nums text-amber-700">{fmtCountdown(remain)}</span>{" "}
@@ -101,7 +101,7 @@ export default function Leaderboard() {
         {items.map((e, idx) => {
           const r = ret(e);
           return (
-            <div key={e.id} className="rounded-2xl bg-white border border-slate-200 p-4 flex items-center gap-4 flex-wrap">
+            <div key={e.id} className="rounded-2xl bg-surface border border-slate-200 p-4 flex items-center gap-4 flex-wrap">
               <div className="w-8 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export default function Leaderboard() {
                 </button>
                 <button
                   onClick={() => vote(e.id, -1)}
-                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === -1 ? "bg-red-600 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
+                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === -1 ? "bg-danger text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
                   title="싫어요"
                 >
                   👎 {e.dislikes}

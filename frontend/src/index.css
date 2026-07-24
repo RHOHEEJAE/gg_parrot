@@ -3,10 +3,189 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- theme palette -----------------------------------------------------
+   Values are bare `R G B` triplets so Tailwind can apply opacity modifiers
+   (see tailwind.config.js). Swapping these under `.dark` re-themes every
+   existing colour utility without touching a single component. */
+@layer base {
+  :root {
+    --c-surface: 255 255 255;
+
+    --c-slate-50: 248 250 252;
+    --c-slate-100: 241 245 249;
+    --c-slate-200: 226 232 240;
+    --c-slate-300: 203 213 225;
+    --c-slate-400: 148 163 184;
+    --c-slate-500: 100 116 139;
+    --c-slate-600: 71 85 105;
+    --c-slate-700: 51 65 85;
+    --c-slate-800: 30 41 59;
+    --c-slate-900: 15 23 42;
+
+    --c-indigo-50: 238 242 255;
+    --c-indigo-100: 224 231 255;
+    --c-indigo-200: 199 210 254;
+    --c-indigo-300: 165 180 252;
+    --c-indigo-400: 129 140 248;
+    --c-indigo-500: 99 102 241;
+    --c-indigo-600: 79 70 229;
+    --c-indigo-700: 67 56 202;
+
+    --c-red-50: 254 242 242;
+    --c-red-100: 254 226 226;
+    --c-red-300: 252 165 165;
+    --c-red-400: 248 113 113;
+    --c-red-500: 239 68 68;
+    --c-red-600: 220 38 38;
+    --c-red-700: 185 28 28;
+    --c-red-800: 153 27 27;
+
+    /* Solid danger buttons (white label). Split from red-600 so dark mode can
+       keep loss/error TEXT light while the button fill stays dark. */
+    --c-danger: 220 38 38;
+    --c-danger-hover: 239 68 68;
+
+    --c-green-50: 240 253 244;
+    --c-green-300: 134 239 172;
+    --c-green-600: 22 163 74;
+    --c-green-700: 21 128 61;
+
+    --c-amber-50: 255 251 235;
+    --c-amber-100: 254 243 199;
+    --c-amber-200: 253 230 138;
+    --c-amber-300: 252 211 77;
+    --c-amber-500: 245 158 11;
+    --c-amber-600: 217 119 6;
+    --c-amber-700: 180 83 9;
+    --c-amber-800: 146 64 14;
+
+    --c-blue-50: 239 246 255;
+    --c-blue-300: 147 197 253;
+    --c-blue-500: 59 130 246;
+    --c-blue-600: 37 99 235;
+    --c-blue-800: 30 64 175;
+
+    --c-cyan-50: 236 254 255;
+    --c-cyan-100: 207 250 254;
+    --c-cyan-200: 165 243 252;
+    --c-cyan-700: 14 116 144;
+    --c-cyan-800: 21 94 117;
+
+    --c-sky-50: 240 249 255;
+    --c-sky-100: 224 242 254;
+    --c-sky-700: 3 105 161;
+    --c-sky-800: 7 89 133;
+
+    /* SVG charts build elements programmatically and can't use Tailwind
+       classes for stroke/fill, so they read these variables directly. */
+    --chart-grid: 226 232 240;
+    --chart-axis: 148 163 184;
+    --chart-crosshair: 100 116 139;
+    --chart-crosshair-tag: 71 85 105;
+    --chart-up: 22 163 74;
+    --chart-down: 220 38 38;
+
+    /* Optimizer heat-map swatches (red→green). The cell label is slate-800,
+       so the swatch must sit opposite it in each theme. */
+    --heat-s: 70%;
+    --heat-l: 92%;
+  }
+
+  .dark {
+    /* Surfaces sit slightly above the page background so cards read as raised. */
+    --c-surface: 22 30 46;
+
+    /* slate inverts: 50 is the page background, 900 is primary text. */
+    --c-slate-50: 12 17 28;
+    --c-slate-100: 30 41 59;
+    --c-slate-200: 45 58 79;
+    --c-slate-300: 61 78 102;
+    --c-slate-400: 125 139 159;
+    --c-slate-500: 156 170 189;
+    --c-slate-600: 190 202 217;
+    --c-slate-700: 214 223 235;
+    --c-slate-800: 233 239 246;
+    --c-slate-900: 245 249 255;
+
+    /* Accents: tints (50-200) go dark, borders (300-400) mid, fills (500-600)
+       stay saturated so white button text still reads, text steps (700-800)
+       go light because they sit on the now-dark tints. */
+    --c-indigo-50: 33 33 78;
+    --c-indigo-100: 46 44 104;
+    --c-indigo-200: 62 60 133;
+    --c-indigo-300: 92 90 172;
+    --c-indigo-400: 129 140 248;
+    --c-indigo-500: 92 96 236; /* hover fill; still readable under white text */
+    --c-indigo-600: 79 74 220;
+    --c-indigo-700: 178 184 253;
+
+    --c-red-50: 74 25 27;
+    --c-red-100: 97 31 34;
+    --c-red-300: 152 55 58;
+    --c-red-400: 196 74 74;
+    --c-red-500: 244 87 87;
+    /* Mostly `text-red-600` (23 uses: losses/errors), so it must stay LIGHT
+       here. Solid danger buttons use --c-danger instead — the two needs are
+       mutually exclusive against a dark surface. */
+    --c-red-600: 240 82 82;
+    --c-red-700: 252 165 165;
+    --c-red-800: 254 202 202;
+
+    --c-danger: 198 32 32;
+    --c-danger-hover: 176 26 26;
+
+    --c-green-50: 20 61 37;
+    --c-green-300: 61 133 88;
+    --c-green-600: 34 180 84;
+    --c-green-700: 134 239 172;
+
+    --c-amber-50: 72 47 12;
+    --c-amber-100: 95 62 15;
+    --c-amber-200: 124 82 22;
+    --c-amber-300: 161 108 30;
+    --c-amber-500: 201 110 10;
+    --c-amber-600: 180 95 10; /* white-on-amber is the weakest pairing; AA-tuned */
+    --c-amber-700: 252 211 77;
+    --c-amber-800: 253 230 138;
+
+    --c-blue-50: 23 45 84;
+    --c-blue-300: 72 111 175;
+    --c-blue-500: 59 124 244;
+    --c-blue-600: 40 100 226;
+    --c-blue-800: 165 200 253;
+
+    --c-cyan-50: 15 58 68;
+    --c-cyan-100: 20 76 89;
+    --c-cyan-200: 30 103 120;
+    --c-cyan-700: 125 226 245;
+    --c-cyan-800: 165 240 252;
+
+    --c-sky-50: 14 48 74;
+    --c-sky-100: 19 64 98;
+    --c-sky-700: 125 211 252;
+    --c-sky-800: 186 230 253;
+
+    --chart-grid: 45 58 79;
+    --chart-axis: 125 139 159;
+    --chart-crosshair: 156 170 189;
+    --chart-crosshair-tag: 100 116 139;
+    --chart-up: 34 197 94;
+    --chart-down: 248 90 90;
+
+    --heat-s: 42%;
+    --heat-l: 26%;
+  }
+}
+
 body {
   @apply bg-slate-50 text-slate-900;
   font-family: system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
 }
+
+/* Native controls (checkboxes, date inputs, select arrows, scrollbars) follow
+   the OS light/dark rendering; without this they stay white-on-white in dark. */
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
 
 /* '오늘의 경주마' marquee — seamless loop of a duplicated track. */
 @keyframes ggp-marquee {

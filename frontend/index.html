@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>🦜 GGparrot · 코인 매크로 백테스트</title>
+    <script>
+      // Apply the saved theme BEFORE first paint, otherwise dark-mode users get
+      // a white flash while the bundle loads. Kept inline and tiny on purpose;
+      // the source of truth for the key/values is src/lib/theme.js.
+      (function () {
+        try {
+          var p = localStorage.getItem("ggp_theme") || "system";
+          var dark =
+            p === "dark" ||
+            (p === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -65,7 +65,7 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
         </div>
       )}
 
-      <div className="rounded-2xl bg-white border border-slate-200 p-6">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-6">
         <div className="flex items-center text-sm text-slate-500 mb-1">
           백테스트 수익률 {periodLabel ? `· ${periodLabel}` : ""}
           <InfoTooltip term="backtest" />
@@ -121,7 +121,7 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
         />
       </div>
 
-      <div className="rounded-2xl bg-white border border-slate-200 p-6">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-6">
         <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>
         <EquityChart curve={r.equity_curve} />
       </div>

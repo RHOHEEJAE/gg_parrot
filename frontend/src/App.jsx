@@ -8,13 +8,14 @@ import HangangTempBanner from "./components/HangangTempBanner.jsx";
 // 컴포넌트와 백엔드(app/whales.py)는 그대로 두고 마운트만 꺼둡니다.
 // import WhaleBanner from "./components/WhaleBanner.jsx";
 import HotCoinsMarquee from "./components/HotCoinsMarquee.jsx";
+import ThemeToggle from "./components/ThemeToggle.jsx";
 
 function Nav() {
   const cls = ({ isActive }) =>
     "px-3 py-2 rounded-lg text-sm font-medium " +
     (isActive ? "bg-slate-200 text-slate-900" : "text-slate-500 hover:text-slate-900");
   return (
-    <header className="border-b border-slate-200 sticky top-0 bg-white/80 backdrop-blur z-10">
+    <header className="border-b border-slate-200 sticky top-0 bg-surface/80 backdrop-blur z-10">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <NavLink to="/" className="text-base font-bold">
@@ -29,7 +30,10 @@ function Nav() {
             </NavLink>
           </nav>
         </div>
-        <SimBadge className="hidden sm:inline-flex" />
+        <div className="flex items-center gap-2">
+          <SimBadge className="hidden sm:inline-flex" />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

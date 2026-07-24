@@ -26,8 +26,8 @@ const INTERVALS = [
   { value: "1d", label: "1일" },
 ];
 
-const UP = "#16a34a";
-const DOWN = "#dc2626";
+const UP = "rgb(var(--chart-up))";
+const DOWN = "rgb(var(--chart-down))";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -147,8 +147,8 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
     >
       {guides.map((v, i) => (
         <g key={i}>
-          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="#e2e8f0" strokeWidth="1" />
-          <text x={W - pad.r + 5} y={y(v) + 3.5} fontSize="9" fill="#94a3b8">
+          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="rgb(var(--chart-grid))" strokeWidth="1" />
+          <text x={W - pad.r + 5} y={y(v) + 3.5} fontSize="9" fill="rgb(var(--chart-axis))">
             {fmtPrice(v)}
           </text>
         </g>
@@ -178,9 +178,9 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
       {/* crosshair on the inspected bar */}
       {hover != null && candles[hover] && (
         <g pointerEvents="none">
-          <line x1={cx(hover)} x2={cx(hover)} y1={pad.t} y2={H - pad.b} stroke="#64748b" strokeWidth="1" strokeDasharray="2 3" opacity="0.8" />
-          <line x1={pad.l} x2={W - pad.r} y1={y(candles[hover].c)} y2={y(candles[hover].c)} stroke="#64748b" strokeWidth="1" strokeDasharray="2 3" opacity="0.55" />
-          <rect x={W - pad.r + 1} y={y(candles[hover].c) - 8} width={pad.r - 3} height={16} rx="3" fill="#475569" />
+          <line x1={cx(hover)} x2={cx(hover)} y1={pad.t} y2={H - pad.b} stroke="rgb(var(--chart-crosshair))" strokeWidth="1" strokeDasharray="2 3" opacity="0.8" />
+          <line x1={pad.l} x2={W - pad.r} y1={y(candles[hover].c)} y2={y(candles[hover].c)} stroke="rgb(var(--chart-crosshair))" strokeWidth="1" strokeDasharray="2 3" opacity="0.55" />
+          <rect x={W - pad.r + 1} y={y(candles[hover].c) - 8} width={pad.r - 3} height={16} rx="3" fill="rgb(var(--chart-crosshair-tag))" />
           <text x={W - pad.r + 5} y={y(candles[hover].c) + 3.5} fontSize="9" fill="#fff" fontWeight="600">
             {fmtPrice(candles[hover].c)}
           </text>
@@ -194,8 +194,8 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
         {fmtPrice(last.c)}
       </text>
 
-      <text x={pad.l} y={H - 5} fontSize="9" fill="#94a3b8">{hhmm(first.t)}</text>
-      <text x={W - pad.r} y={H - 5} fontSize="9" fill="#94a3b8" textAnchor="end">{hhmm(last.t)}</text>
+      <text x={pad.l} y={H - 5} fontSize="9" fill="rgb(var(--chart-axis))">{hhmm(first.t)}</text>
+      <text x={W - pad.r} y={H - 5} fontSize="9" fill="rgb(var(--chart-axis))" textAnchor="end">{hhmm(last.t)}</text>
     </svg>
   );
 }
@@ -313,7 +313,7 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
     "rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 px-2 py-1 text-sm leading-none";
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-5">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-5">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="flex items-baseline gap-2">
           <h3 className="font-semibold">📈 {symbol}</h3>

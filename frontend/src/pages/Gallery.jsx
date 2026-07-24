@@ -36,7 +36,7 @@ export default function Gallery() {
         {items.map((it, idx) => {
           const up = it.return_pct >= 0;
           return (
-            <div key={it.share_slug} className="rounded-2xl bg-white border border-slate-200 p-5">
+            <div key={it.share_slug} className="rounded-2xl bg-surface border border-slate-200 p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="text-xs text-slate-500">#{idx + 1} · {it.period_label}</div>
                 <div className={"text-2xl font-bold " + (up ? "text-green-600" : "text-red-600")}>
