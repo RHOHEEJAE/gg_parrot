@@ -324,13 +324,14 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
         </div>
       )}
 
-      {/* real-trade download (demo mockup) */}
+      {/* real-trade download. The bundle places REAL orders (testnet by
+          default) — the copy below must not understate that. */}
       <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-2">
         <div className="text-sm font-semibold text-amber-800">동작 검증 완료 → 실거래로 전환</div>
         <button
           onClick={downloadBot}
           disabled={!!valErr}
-          className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-slate-900"
+          className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
         >
           ⬇ 실거래 실행 파일 다운로드 (bot.py)
         </button>
@@ -338,10 +339,24 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
           실거래는 사용자 PC에서 사용자 본인의 API 키로 실행됩니다. 본 도구는 투자 조언이 아니며, 실거래로
           인한 손익 책임은 사용자에게 있습니다.
         </p>
-        <p className="text-xs text-slate-500">
-          ※ 데모 버전: 다운로드되는 파일은 키 입력 화면까지만 동작하며 실제 거래를 실행하지 않습니다. 키는
-          저장·전송되지 않습니다.
-        </p>
+        <div className="rounded-lg border border-amber-300 bg-surface/50 p-2.5 space-y-1">
+          <p className="text-xs font-semibold text-amber-800">
+            ⚠️ 이 파일은 <u>실제로 주문을 실행합니다</u> (기본값: 바이낸스 테스트넷 = 가짜 자금)
+          </p>
+          <ul className="text-xs text-amber-700 list-disc pl-4 space-y-0.5">
+            <li>
+              {macro.position_side === "short" || macro.leverage > 1
+                ? "숏·레버리지 매크로라 USDT-M 선물로 실행됩니다."
+                : "롱·1배 매크로라 현물(spot)로 실행됩니다."}
+            </li>
+            <li>익절·손절·일일 최대손실·최대 보유시간·재진입 금지가 함께 적용됩니다.</li>
+            <li>
+              실제 자금으로 바꾸려면 사용자가 직접 <code>USE_TESTNET=False</code> 로 수정해야 하며, 코드가
+              자동 전환하지 않습니다.
+            </li>
+            <li>API 키는 메모리에서만 쓰이고 저장·전송·로깅하지 않습니다. 출금 기능은 없습니다.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

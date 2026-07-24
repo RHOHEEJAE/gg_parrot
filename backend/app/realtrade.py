@@ -158,7 +158,96 @@ def _strategy_targets(macro: dict) -> dict:
         "sell_price": float(p["sell_price"]) if p.get("sell_price") else None,
         "invest_ratio": float(risk.get("invest_ratio", 1.0)),
         "capital": float(p.get("initial_capital", 0) or 0),
+        "risk": risk,  # 공통 리스크 3종 (RiskGuard 가 사용)
     }
+
+
+class RiskGuard:
+    """공통 리스크 관리 3종 (백테스트/페이퍼 엔진과 같은 의미).
+
+      * 일일 최대손실 — 당일 손익이 -N% 도달 시 그날은 청산 후 신규 진입 중단
+      * 최대 보유시간 — 진입 후 N시간 초과 시 강제 청산
+      * 재진입 금지   — 손절로 청산한 뒤 N분간 재진입 차단
+
+    엔진은 봉 시각으로 판정하지만 봇은 실시간이라 실제 시계(time.time)를 씁니다.
+    기준 자본은 macro 의 initial_capital(없으면 1회 주문 상한)입니다.
+    """
+
+    def __init__(self, risk: dict, base_capital: float) -> None:
+        self.daily_max_loss = risk.get("daily_max_loss_pct")
+        self.max_holding_hours = risk.get("max_holding_hours")
+        self.cooldown_minutes = float(risk.get("cooldown_minutes") or 0)
+        self.base = base_capital if base_capital > 0 else MAX_ORDER_USDT
+        self._day = None
+        self._day_pnl = 0.0        # 당일 실현손익(USDT)
+        self._halted_day = None
+        self._entry_time = None
+        self._cooldown_until = 0.0
+
+    def describe(self) -> str:
+        bits = []
+        if self.daily_max_loss:
+            bits.append(f"일일최대손실 {self.daily_max_loss}%")
+        if self.max_holding_hours:
+            bits.append(f"최대보유 {self.max_holding_hours}h")
+        if self.cooldown_minutes:
+            bits.append(f"재진입금지 {self.cooldown_minutes}분")
+        return " · ".join(bits) if bits else "설정 없음"
+
+    def roll_day(self) -> None:
+        """날짜가 바뀌면 당일 손익과 중단 상태를 초기화."""
+        today = time.strftime("%Y-%m-%d")
+        if today != self._day:
+            self._day = today
+            self._day_pnl = 0.0
+            if self._halted_day and self._halted_day != today:
+                self._halted_day = None
+
+    def _daily_loss_pct(self, unrealized: float = 0.0) -> float:
+        return (self._day_pnl + unrealized) / self.base * 100.0
+
+    def entry_blocked(self):
+        """(차단여부, 사유). 진입 직전에 호출."""
+        if self._halted_day and self._halted_day == self._day:
+            return True, f"일일 최대손실({self.daily_max_loss}%) 도달 → 오늘은 신규 진입 중단"
+        remain = self._cooldown_until - time.time()
+        if remain > 0:
+            return True, f"손절 후 재진입 금지 {remain/60:.1f}분 남음"
+        return False, ""
+
+    def force_close(self, unrealized: float):
+        """(강제청산 여부, 사유). 보유 중일 때 매 주기 호출."""
+        if self.max_holding_hours and self._entry_time is not None:
+            held_h = (time.time() - self._entry_time) / 3600.0
+            if held_h >= float(self.max_holding_hours):
+                return True, f"최대 보유시간 {self.max_holding_hours}h 초과({held_h:.1f}h)"
+        if self.daily_max_loss:
+            dd = self._daily_loss_pct(unrealized)
+            if dd <= -float(self.daily_max_loss):
+                return True, f"일일 최대손실 도달({dd:.2f}% ≤ -{self.daily_max_loss}%)"
+        return False, ""
+
+    def on_entry(self) -> None:
+        self._entry_time = time.time()
+
+    def on_exit(self, pnl_usdt: float, was_stop: bool) -> None:
+        self._day_pnl += pnl_usdt
+        self._entry_time = None
+        if was_stop and self.cooldown_minutes > 0:
+            self._cooldown_until = time.time() + self.cooldown_minutes * 60.0
+            print(f"  ⏳ 손절 → {self.cooldown_minutes:.0f}분간 재진입 금지")
+        if self.daily_max_loss and self._daily_loss_pct() <= -float(self.daily_max_loss):
+            self._halted_day = self._day
+            print(f"  🛑 일일 최대손실 도달 → 오늘은 더 이상 진입하지 않습니다")
+
+
+def _was_stop_exit(t: dict, price: float, entry: float, side: str) -> bool:
+    """청산이 손절 때문이었는지(=쿨다운 대상) 판정."""
+    if t["sl_pct"] is None or entry <= 0:
+        return False
+    if side == "long":
+        return price <= entry * (1 - t["sl_pct"] / 100.0)
+    return price >= entry * (1 + t["sl_pct"] / 100.0)
 
 
 def _should_enter(t: dict, price: float, side: str) -> bool:
@@ -251,6 +340,8 @@ def run_spot(client, macro: dict, symbol: str, t: dict) -> None:
         print("  → macro.json 의 \"symbol\" 을 위 종목으로 바꾸거나, 숏/레버리지면 선물로 실행하세요.")
         return
     step, min_notional = _parse_filters(info)
+    guard = RiskGuard(t["risk"], t["capital"] * t["invest_ratio"] if t["capital"] else 0.0)
+    print(f"공통 리스크: {guard.describe()}")
     print(f"주문 상한 {MAX_ORDER_USDT} USDT · {POLL_SECONDS}초마다 평가. Ctrl+C 로 안전 종료.\n")
 
     in_position, entry_price, held_qty, realized = False, 0.0, 0.0, 0.0
@@ -262,6 +353,7 @@ def run_spot(client, macro: dict, symbol: str, t: dict) -> None:
                 print(f"  일시 오류(시세 조회): {exc} — {POLL_SECONDS}초 후 재시도")
                 time.sleep(POLL_SECONDS)
                 continue
+            guard.roll_day()
             uf, bf = _spot_balances(client, base)
             if in_position and entry_price > 0:
                 pos = f"보유 {held_qty} {base}(진입가 {entry_price})"
@@ -272,7 +364,10 @@ def run_spot(client, macro: dict, symbol: str, t: dict) -> None:
             print(f"[{time.strftime('%H:%M:%S')}] {symbol} 현재가 {price} | {pos} | {pnl} "
                   f"| 누적 {realized:+.2f} USDT | 잔고 {bal}")
             if not in_position:
-                if _should_enter(t, price, "long"):
+                blocked, why = guard.entry_blocked()
+                if blocked:
+                    print(f"  ⏸ 진입 보류: {why}")
+                elif _should_enter(t, price, "long"):
                     budget = t["capital"] * t["invest_ratio"] if t["capital"] else MAX_ORDER_USDT
                     qty, notional = _order_qty(price, step, min_notional, budget, 1, "spot")
                     if qty <= 0 or notional < min_notional:
@@ -281,15 +376,21 @@ def run_spot(client, macro: dict, symbol: str, t: dict) -> None:
                         print(f"[진입 신호] 현재가 {price} → 매수 {qty} {symbol}")
                         if _spot_place(client, symbol, "BUY", qty):
                             in_position, entry_price, held_qty = True, price, qty
+                            guard.on_entry()
             else:
-                if _should_exit(t, price, entry_price, "long"):
-                    print(f"[청산 신호] 현재가 {price} (진입 {entry_price}) → 매도 {held_qty}")
+                unreal = _pnl_usdt(held_qty, entry_price, price, "long")
+                forced, why = guard.force_close(unreal)
+                if forced or _should_exit(t, price, entry_price, "long"):
+                    tag = f"[강제청산: {why}]" if forced else "[청산 신호]"
+                    print(f"{tag} 현재가 {price} (진입 {entry_price}) → 매도 {held_qty}")
                     if _spot_place(client, symbol, "SELL", _round_step(held_qty, step)):
                         pnl_usdt = _pnl_usdt(held_qty, entry_price, price, "long")
                         realized += pnl_usdt
                         print(f"  이번 거래 손익: {_pnl_pct(entry_price, price, 'long'):+.2f}% "
                               f"({pnl_usdt:+.2f} USDT) · 누적 {realized:+.2f} USDT")
+                        was_stop = not forced and _was_stop_exit(t, price, entry_price, "long")
                         in_position, entry_price, held_qty = False, 0.0, 0.0
+                        guard.on_exit(pnl_usdt, was_stop)
             time.sleep(POLL_SECONDS)
     except KeyboardInterrupt:
         print("\n종료 요청(Ctrl+C).")
@@ -369,6 +470,8 @@ def run_futures(client, macro: dict, symbol: str, t: dict, side: str, leverage: 
     close_side = "SELL" if side == "long" else "BUY"   # 청산
     margin_note = ("증거금 = 상한/레버리지" if ORDER_CAP_BASIS == "notional"
                    else "노출 = 상한×레버리지")
+    guard = RiskGuard(t["risk"], t["capital"] * t["invest_ratio"] if t["capital"] else 0.0)
+    print(f"공통 리스크: {guard.describe()}")
     print(f"주문 상한 {MAX_ORDER_USDT} USDT ({ORDER_CAP_BASIS}, {margin_note}) · "
           f"{POLL_SECONDS}초마다 평가. Ctrl+C 로 안전 종료.\n")
 
@@ -381,6 +484,7 @@ def run_futures(client, macro: dict, symbol: str, t: dict, side: str, leverage: 
                 print(f"  일시 오류(시세 조회): {exc} — {POLL_SECONDS}초 후 재시도")
                 time.sleep(POLL_SECONDS)
                 continue
+            guard.roll_day()
             ub = _fut_usdt_balance(client)
             if in_position and entry_price > 0:
                 pos = f"{side.upper()} {held_qty} {symbol}(진입가 {entry_price})"
@@ -391,7 +495,10 @@ def run_futures(client, macro: dict, symbol: str, t: dict, side: str, leverage: 
             print(f"[{time.strftime('%H:%M:%S')}] {symbol} 현재가 {price} | {pos} | {pnl} "
                   f"| 누적 {realized:+.2f} USDT | {bal}")
             if not in_position:
-                if _should_enter(t, price, side):
+                blocked, why = guard.entry_blocked()
+                if blocked:
+                    print(f"  ⏸ 진입 보류: {why}")
+                elif _should_enter(t, price, side):
                     budget = t["capital"] * t["invest_ratio"] if t["capital"] else MAX_ORDER_USDT
                     qty, notional = _order_qty(price, step, min_notional, budget, leverage, "futures")
                     if qty <= 0 or notional < min_notional:
@@ -402,15 +509,21 @@ def run_futures(client, macro: dict, symbol: str, t: dict, side: str, leverage: 
                               f"(명목 {notional:.2f} USDT · 증거금 ~{margin:.2f} USDT · {leverage}배)")
                         if _fut_place(client, symbol, open_side, qty):
                             in_position, entry_price, held_qty = True, price, qty
+                            guard.on_entry()
             else:
-                if _should_exit(t, price, entry_price, side):
-                    print(f"[청산 신호] 현재가 {price} (진입 {entry_price}) → {close_side} {held_qty}")
+                unreal = _pnl_usdt(held_qty, entry_price, price, side)
+                forced, why = guard.force_close(unreal)
+                if forced or _should_exit(t, price, entry_price, side):
+                    tag = f"[강제청산: {why}]" if forced else "[청산 신호]"
+                    print(f"{tag} 현재가 {price} (진입 {entry_price}) → {close_side} {held_qty}")
                     if _fut_place(client, symbol, close_side, _round_step(held_qty, step), reduce_only=True):
                         pnl_usdt = _pnl_usdt(held_qty, entry_price, price, side)
                         realized += pnl_usdt
                         print(f"  이번 거래 손익: {_pnl_pct(entry_price, price, side):+.2f}% "
                               f"({pnl_usdt:+.2f} USDT) · 누적 {realized:+.2f} USDT")
+                        was_stop = not forced and _was_stop_exit(t, price, entry_price, side)
                         in_position, entry_price, held_qty = False, 0.0, 0.0
+                        guard.on_exit(pnl_usdt, was_stop)
             time.sleep(POLL_SECONDS)
     except KeyboardInterrupt:
         print("\n종료 요청(Ctrl+C).")

@@ -21,6 +21,86 @@ function heatStyle(value, min, max) {
   };
 }
 
+const pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+const tone = (v) => (v >= 0 ? "text-green-600" : "text-red-600");
+
+// Verdict on the winning cell: did the value picked on the training window
+// still work on the window it was never allowed to see?
+function verdict(best, v) {
+  if (!v?.split) {
+    return {
+      cls: "border-amber-300 bg-amber-50 text-amber-800",
+      icon: "⚠️",
+      text: "기간이 짧아 검증을 못 했어요. 과거 전체에 맞춘 값이라 그대로 믿기 어렵습니다.",
+    };
+  }
+  const oos = best.oos_return_pct;
+  if (oos == null) return null;
+  if (oos <= 0) {
+    return {
+      cls: "border-red-300 bg-red-50 text-red-800",
+      icon: "❌",
+      text: "학습 구간에선 좋았지만 검증 구간에선 손실입니다. 과거에 맞춘 값일 가능성이 높아요.",
+    };
+  }
+  if (best.final_return_pct > 0 && oos < best.final_return_pct * 0.3) {
+    return {
+      cls: "border-amber-300 bg-amber-50 text-amber-800",
+      icon: "⚠️",
+      text: "검증 구간에서도 이익이지만 학습 구간보다 크게 나빠졌어요. 기대치를 낮춰 잡으세요.",
+    };
+  }
+  return {
+    cls: "border-green-300 bg-green-50 text-green-700",
+    icon: "✅",
+    text: "고를 때 쓰지 않은 검증 구간에서도 이익이 났습니다. 상대적으로 견고한 편이에요.",
+  };
+}
+
+function BestSummary({ best, v }) {
+  const info = verdict(best, v);
+  return (
+    <div className="space-y-2">
+      <div className="text-sm text-slate-700">
+        학습 구간 최적: <b>익절 {best.tp}% · 손절 {best.sl}%</b> →{" "}
+        <b className={tone(best.final_return_pct)}>{pct(best.final_return_pct)}</b>{" "}
+        <span className="text-slate-500">
+          (MDD -{best.mdd_pct.toFixed(1)}% · 매매 {best.total_trades}회)
+        </span>
+      </div>
+
+      {v?.split && best.oos_return_pct != null && (
+        <div className="text-sm text-slate-700">
+          같은 값의 <b>검증 구간</b> 성적:{" "}
+          <b className={tone(best.oos_return_pct)}>{pct(best.oos_return_pct)}</b>{" "}
+          <span className="text-slate-500">
+            (매매 {best.oos_trades}회
+            {v.overfit_gap != null && ` · 학습 대비 ${v.overfit_gap >= 0 ? "-" : "+"}${Math.abs(v.overfit_gap).toFixed(2)}%p`})
+          </span>
+        </div>
+      )}
+
+      {info && (
+        <div className={"rounded-lg border px-3 py-2 text-xs " + info.cls}>
+          {info.icon} {info.text}
+        </div>
+      )}
+
+      {v?.split && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+          <span>학습 {v.train_label} ({v.train_bars}봉)</span>
+          <span>검증 {v.test_label} ({v.test_bars}봉)</span>
+          {v.generalization_rate != null && (
+            <span>
+              학습에서 이익이던 조합 중 <b>{v.generalization_rate}%</b>가 검증에서도 이익
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OptimizePanel({ form, setForm, valErr }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -73,8 +153,8 @@ export default function OptimizePanel({ form, setForm, valErr }) {
       </div>
 
       <p className="text-xs text-slate-500">
-        같은 종목·기간으로 익절(가로)×손절(세로) 조합을 모두 돌려, 그때 수익률이 가장 좋았던 구간을 찾아요.
-        칸을 클릭하면 그 값이 빌더에 적용됩니다.
+        익절(가로)×손절(세로) 조합을 모두 돌려봅니다. 기간을 <b>학습</b>과 <b>검증</b>으로 나눠서, 학습 구간에서
+        고른 값이 <b>고를 때 쓰지 않은 검증 구간</b>에서도 통했는지까지 확인해요. 칸을 클릭하면 빌더에 적용됩니다.
       </p>
 
       {error && <div className="text-sm text-red-600">오류: {error}</div>}
@@ -106,7 +186,14 @@ export default function OptimizePanel({ form, setForm, valErr }) {
                         <td key={tp} className="p-0.5">
                           <button
                             onClick={() => applyCell(tp, sl)}
-                            title={`익절 ${tp}% · 손절 ${sl}%\n수익률 ${c.final_return_pct.toFixed(2)}% · MDD -${c.mdd_pct.toFixed(1)}% · 샤프 ${c.sharpe ?? "—"} · 매매 ${c.total_trades}회\n클릭하면 빌더에 적용`}
+                            title={
+                              `익절 ${tp}% · 손절 ${sl}%\n` +
+                              `학습 ${c.final_return_pct.toFixed(2)}% · MDD -${c.mdd_pct.toFixed(1)}% · 샤프 ${c.sharpe ?? "—"} · 매매 ${c.total_trades}회\n` +
+                              (c.oos_return_pct != null
+                                ? `검증 ${c.oos_return_pct.toFixed(2)}% (매매 ${c.oos_trades}회)\n`
+                                : "검증 구간 없음 (기간이 짧아요)\n") +
+                              "클릭하면 빌더에 적용"
+                            }
                             style={heatStyle(c.final_return_pct, min, max)}
                             className={
                               "w-full min-w-[64px] rounded px-1.5 py-2 text-center font-semibold text-slate-800 transition " +
@@ -117,6 +204,19 @@ export default function OptimizePanel({ form, setForm, valErr }) {
                           >
                             {c.final_return_pct >= 0 ? "+" : ""}
                             {c.final_return_pct.toFixed(1)}%
+                            {/* Held-out result under the fitted one: a cell that
+                                only worked because it was fitted shows it here. */}
+                            {c.oos_return_pct != null && (
+                              <span
+                                className={
+                                  "block text-[10px] font-semibold " +
+                                  (c.oos_return_pct >= 0 ? "text-green-700" : "text-red-700")
+                                }
+                              >
+                                검증 {c.oos_return_pct >= 0 ? "+" : ""}
+                                {c.oos_return_pct.toFixed(1)}%
+                              </span>
+                            )}
                             {best && <span className="block text-[10px] font-bold text-green-700">★ 최적</span>}
                             {cur && !best && <span className="block text-[10px] text-blue-600">현재</span>}
                           </button>
@@ -129,22 +229,11 @@ export default function OptimizePanel({ form, setForm, valErr }) {
             </table>
           </div>
 
-          {data.best && (
-            <div className="text-sm text-slate-700">
-              이 기간 최적: <b>익절 {data.best.tp}% · 손절 {data.best.sl}%</b> →{" "}
-              <b className={data.best.final_return_pct >= 0 ? "text-green-600" : "text-red-600"}>
-                {data.best.final_return_pct >= 0 ? "+" : ""}
-                {data.best.final_return_pct.toFixed(2)}%
-              </b>{" "}
-              <span className="text-slate-500">
-                (MDD -{data.best.mdd_pct.toFixed(1)}% · 매매 {data.best.total_trades}회)
-              </span>
-            </div>
-          )}
+          {data.best && <BestSummary best={data.best} v={data.validation} />}
 
           <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-            ⚠️ 과최적화 주의: 여기서 가장 좋아 보이는 값은 <b>과거에만</b> 잘 맞았던 값일 수 있어요.
-            미래 수익을 보장하지 않으며, 특정 한 칸만 튀는 조합보다 <b>주변까지 고르게 좋은 구간</b>이 더 믿을 만해요.
+            ⚠️ 과최적화 주의: 위 숫자는 <b>과거에 맞춰 고른</b> 값이라 미래 수익을 보장하지 않아요.
+            특정 한 칸만 튀는 조합보다 <b>주변까지 고르게 좋은 구간</b>이 더 믿을 만합니다.
           </div>
         </>
       )}
