@@ -20,6 +20,7 @@ export const RULE_TYPES = {
   H: { label: "H · 마틴게일 / 세이프티오더", allowShort: false },
   I: { label: "I · 변동성 돌파 (래리 윌리엄스)", allowShort: false },
   J: { label: "J · 이동평균 크로스", allowShort: true, indicator: true },
+  K: { label: "K · 하락 방어 전환 (SAR, 선물)", allowShort: false },
 };
 
 export const PERIOD_PRESETS = [
@@ -70,6 +71,10 @@ export const TYPE_DEFAULTS = {
     ma_type: "SMA", fast_period: 20, slow_period: 60, entry_signal: "golden_cross",
     exit_signal: "dead_cross", take_profit: "", confirm_candles: 1, initial_capital: 1000000,
   },
+  K: {
+    long_take_profit_pct: "", drop_trigger_pct: 5, partial_exit_pct: 50, flip_to_short: true,
+    short_take_profit_pct: 5, short_stop_loss_pct: 3, reenter_long_after: true, initial_capital: 1000000,
+  },
 };
 
 export function defaultForm() {
@@ -98,6 +103,7 @@ export function defaultForm() {
     ...TYPE_DEFAULTS.H,
     ...TYPE_DEFAULTS.I,
     ...TYPE_DEFAULTS.J,
+    ...TYPE_DEFAULTS.K,
     // common risk
     invest_ratio_pct: 100,
     stop_loss_pct: 3,
@@ -182,6 +188,12 @@ export function validate(form) {
       return "J: 청산신호가 익절 포함이면 take_profit(%)이 필요합니다.";
     }
   }
+  if (rt === "K") {
+    if (!(num(form.drop_trigger_pct) > 0)) return "K: 방어 발동 하락률(drop_trigger_pct)이 필요합니다.";
+    if (!(num(form.partial_exit_pct) > 0 && num(form.partial_exit_pct) <= 100)) return "K: 부분 매도 비율(partial_exit_pct)은 0 초과 100 이하여야 합니다.";
+    if (!(num(form.short_take_profit_pct) > 0)) return "K: 숏 익절률(short_take_profit_pct)이 필요합니다.";
+    if (!(num(form.short_stop_loss_pct) > 0)) return "K: 숏 전환은 손절률(short_stop_loss_pct)이 필수입니다.";
+  }
   return null;
 }
 
@@ -237,6 +249,13 @@ function buildParams(rt, form) {
         entry_signal: form.entry_signal, exit_signal: form.exit_signal, take_profit: optNum(form.take_profit),
         confirm_candles: num(form.confirm_candles), initial_capital: num(form.initial_capital),
       };
+    case "K":
+      return {
+        long_take_profit_pct: optNum(form.long_take_profit_pct), drop_trigger_pct: num(form.drop_trigger_pct),
+        partial_exit_pct: num(form.partial_exit_pct), flip_to_short: !!form.flip_to_short,
+        short_take_profit_pct: num(form.short_take_profit_pct), short_stop_loss_pct: num(form.short_stop_loss_pct),
+        reenter_long_after: !!form.reenter_long_after, initial_capital: num(form.initial_capital),
+      };
     default:
       return {};
   }
@@ -287,7 +306,7 @@ export function macroToForm(macro) {
   f.market = macro.market ?? "auto";
   Object.assign(f, macro.params); // param keys == form keys
   // null per_grid_invest / take_profit / ma_filter_period -> empty input
-  ["per_grid_invest", "take_profit", "ma_filter_period"].forEach((k) => {
+  ["per_grid_invest", "take_profit", "ma_filter_period", "long_take_profit_pct"].forEach((k) => {
     if (f[k] == null) f[k] = "";
   });
   const r = macro.risk || {};

@@ -245,6 +245,34 @@ class CandleSim:
             self._cooldown_until = ts + timedelta(minutes=self.cooldown_minutes)
         return self._fill(side, f, qty, mark)
 
+    def _reduce_long(self, fraction: float, close: float, mark: float, ts: datetime) -> Optional[Fill]:
+        """Sell ``fraction`` (0<f<=1) of the long book at ``close``.
+
+        Banks the freed margin + realized PnL back to cash and shrinks each lot
+        proportionally (dust lots dropped). Long book only — used by the SAR
+        defense partial exit. ``_close_all`` remains the full-close path.
+        """
+        if fraction <= 0 or self.side is PositionSide.SHORT or not self.in_position():
+            return None
+        fraction = min(fraction, 1.0)
+        f = sell_fill(close, self.slip)
+        sold_qty = 0.0
+        pnl = 0.0
+        for lot in self.lots:
+            q = lot.qty * fraction
+            m = lot.margin * fraction
+            exit_comm = q * f * self.comm / 100.0
+            self.cash += m + q * (f - lot.fill) - exit_comm
+            pnl += q * (f - lot.fill) - exit_comm
+            lot.qty -= q
+            lot.margin -= m
+            sold_qty += q
+        self.closed_trades.append(pnl)
+        self.lots = [l for l in self.lots if l.qty > 1e-12]
+        if not self.lots:
+            self._entry_time = None
+        return self._fill("sell", f, sold_qty, mark)
+
     def _liquidate_all(self, px: float, mark: float, ts: datetime) -> Optional[Fill]:
         """Isolated liquidation: the whole committed margin is lost (전액 손실).
 
@@ -783,6 +811,133 @@ class MACrossSim(_IndicatorSim):
                 self._pending = "exit"
 
 
+# --- K: SAR defense reversal (long -> partial exit -> flip short) --------
+class SarSim(CandleSim):
+    r"""Long-primary strategy with a defensive stop-and-reverse.
+
+    Lifecycle (single position at a time)::
+
+        FLAT --enter--> LONG --+long_tp%--> take-profit --> FLAT (re-enter)
+                          |
+             -drop_trigger% from avg entry (defense)
+                          v
+              sell partial_exit% of the long
+                          |
+             flip_to_short? close remainder + open SHORT   (self.side -> SHORT)
+                          v
+                        SHORT --(-short_tp% further drop)--> take-profit
+                          |   \--(+short_sl% bounce)-------> stop-loss (bounded)
+                          v
+                        FLAT --reenter_long_after?--> LONG
+
+    The shared price stop-loss (``self.sl``) is neutralized because the drawdown
+    trigger IS the long-leg stop here; the short leg carries its own mandatory
+    stop. Liquidation / daily-max-loss / max-holding from ``_common_risk`` stay
+    active and follow ``self.side`` as it flips.
+    """
+
+    def __init__(self, macro, initial_capital=None):
+        super().__init__(macro, initial_capital)
+        self.sl = None  # drawdown trigger replaces the shared long stop-loss
+        self.long_tp = self.p.get("long_take_profit_pct")
+        self.drop_trigger = float(self.p["drop_trigger_pct"])
+        self.partial_exit = float(self.p.get("partial_exit_pct", 50.0)) / 100.0
+        self.flip = bool(self.p.get("flip_to_short", True))
+        self.short_tp = float(self.p["short_take_profit_pct"])
+        self.short_sl = float(self.p["short_stop_loss_pct"])
+        self.reenter = bool(self.p.get("reenter_long_after", True))
+        self._phase = "long"  # "long" | "short"
+        self._defended = False  # partial exit already taken for the current long leg
+
+    def _reset_after_flat(self) -> None:
+        self.side = PositionSide.LONG
+        self._phase = "long"
+        self._defended = False
+
+    def _end_short(self) -> None:
+        self.side = PositionSide.LONG
+        self._phase = "long"
+        self._defended = False
+        if not self.reenter:
+            self.stopped = True  # stay flat for good
+
+    def _strategy(self, o, h, l, c, ts, fills):
+        # Common risk (liquidation / daily-loss / max-holding). self.sl is None so
+        # the shared price stop-loss is inert; the checks that remain follow side.
+        if self._common_risk(o, h, l, c, ts, fills):
+            self._reset_after_flat()
+            return
+
+        if self.in_position():
+            if self.side is PositionSide.SHORT:
+                self._manage_short(o, h, l, c, ts, fills)
+            else:
+                self._manage_long(o, h, l, c, ts, fills)
+            return
+
+        # flat -> (re)enter long
+        if self._entry_blocked(ts):
+            return
+        f = self._open_long(self.invest_ratio * self.cash, c, ts, c)
+        if f:
+            fills.append(f)
+            self.side = PositionSide.LONG
+            self._phase = "long"
+            self._defended = False
+
+    def _manage_long(self, o, h, l, c, ts, fills):
+        avg = self.avg_entry()
+        # Long take-profit (intrabar high) — re-enters on a later flat bar.
+        if self.long_tp:
+            tp_px = avg * (1 + float(self.long_tp) / 100.0)
+            if h >= tp_px:
+                f = self._close_all(tp_px, tp_px, is_stop=False, ts=ts)
+                if f:
+                    fills.append(f)
+                self._reset_after_flat()
+                return
+        # Defense trigger (intrabar low): drawdown of drop_trigger% from avg entry.
+        trig_px = avg * (1 - self.drop_trigger / 100.0)
+        if not self._defended and l <= trig_px:
+            pf = self._reduce_long(self.partial_exit, trig_px, trig_px, ts)
+            if pf:
+                fills.append(pf)
+            self._defended = True
+            if self.flip:
+                if self.in_position():
+                    cf = self._close_all(trig_px, trig_px, is_stop=False, ts=ts)
+                    if cf:
+                        fills.append(cf)
+                self.side = PositionSide.SHORT
+                sf = self._open_short(trig_px, ts, trig_px)
+                if sf:
+                    fills.append(sf)
+                    self._phase = "short"
+                else:  # no cash to short -> stay flat/long
+                    self.side = PositionSide.LONG
+                    self._phase = "long"
+
+    def _manage_short(self, o, h, l, c, ts, fills):
+        avg = self.avg_entry()
+        tp_px = avg * (1 - self.short_tp / 100.0)  # profit: price falls
+        sl_px = avg * (1 + self.short_sl / 100.0)  # stop: price rises (bounce)
+        both = l <= tp_px and h >= sl_px
+        # Same-bar priority: stop-loss wins (conservative) and is counted.
+        if h >= sl_px:
+            f = self._close_all(sl_px, sl_px, is_stop=True, ts=ts)
+            if f:
+                fills.append(f)
+            if both:
+                self.same_bar_sl += 1
+            self._end_short()
+            return
+        if l <= tp_px:
+            f = self._close_all(tp_px, tp_px, is_stop=False, ts=ts)
+            if f:
+                fills.append(f)
+            self._end_short()
+
+
 _SIM_BY_TYPE = {
     RuleType.D: GridSim,
     RuleType.E: TrailingSim,
@@ -791,6 +946,7 @@ _SIM_BY_TYPE = {
     RuleType.H: MartingaleSim,
     RuleType.I: BreakoutSim,
     RuleType.J: MACrossSim,
+    RuleType.K: SarSim,
 }
 
 

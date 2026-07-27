@@ -33,6 +33,7 @@ class RuleType(str, enum.Enum):
     H = "H"  # martingale / safety orders (multi-order)
     I = "I"  # volatility breakout (Larry Williams)
     J = "J"  # moving-average cross (indicator)
+    K = "K"  # SAR defense reversal (long -> partial exit -> flip short)
 
 
 # Types whose signals are indicator-based -> candle_interval is meaningful and
@@ -42,7 +43,7 @@ INDICATOR_TYPES = frozenset({RuleType.F, RuleType.G, RuleType.J})
 MULTI_ORDER_TYPES = frozenset({RuleType.D, RuleType.H})
 # Everything except the three originals runs on the candle engine.
 CANDLE_TYPES = frozenset(
-    {RuleType.D, RuleType.E, RuleType.F, RuleType.G, RuleType.H, RuleType.I, RuleType.J}
+    {RuleType.D, RuleType.E, RuleType.F, RuleType.G, RuleType.H, RuleType.I, RuleType.J, RuleType.K}
 )
 
 
@@ -197,6 +198,25 @@ class ParamsJ(BaseModel):
         return self
 
 
+class ParamsK(BaseModel):
+    """SAR defense reversal.
+
+    Long first. When the long is down ``drop_trigger_pct`` from its average entry,
+    sell ``partial_exit_pct`` of it (de-risk); if ``flip_to_short`` the remaining
+    long is closed and a short is opened. The short exits on its own take-profit
+    (further drop) or stop-loss (bounce — mandatory, short loss is unbounded).
+    """
+
+    long_take_profit_pct: Optional[float] = Field(default=None, gt=0)  # optional long TP
+    drop_trigger_pct: float = Field(gt=0)  # long drawdown from avg entry -> defense
+    partial_exit_pct: float = Field(default=50.0, gt=0, le=100)  # sell X% of the long at trigger
+    flip_to_short: bool = True  # after partial exit, close remainder and open a short
+    short_take_profit_pct: float = Field(gt=0)  # short profit target (further drop)
+    short_stop_loss_pct: float = Field(gt=0)  # short stop (bounce) — REQUIRED
+    reenter_long_after: bool = True  # after the short closes, re-enter long (SAR cycle)
+    initial_capital: float = Field(gt=0)
+
+
 _PARAMS_MODEL: dict[RuleType, type[BaseModel]] = {
     RuleType.D: ParamsD,
     RuleType.E: ParamsE,
@@ -205,6 +225,7 @@ _PARAMS_MODEL: dict[RuleType, type[BaseModel]] = {
     RuleType.H: ParamsH,
     RuleType.I: ParamsI,
     RuleType.J: ParamsJ,
+    RuleType.K: ParamsK,
 }
 
 # Required parameter keys for the original rule types (validated on the raw dict).
@@ -322,5 +343,10 @@ class Macro(BaseModel):
         """
         if self.market in ("spot", "futures"):
             return self.market
-        needs_futures = self.position_side is PositionSide.SHORT or self.leverage > 1
+        # K flips to short mid-run, so it always needs futures (spot can't short).
+        needs_futures = (
+            self.position_side is PositionSide.SHORT
+            or self.leverage > 1
+            or self.rule_type is RuleType.K
+        )
         return "futures" if needs_futures else "spot"

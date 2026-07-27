@@ -35,6 +35,8 @@ _VALID_PARAMS = {
               max_safety_orders=3, take_profit=1.5, initial_capital=1_000_000),
     "I": dict(k=0.5, exit_mode="next_open", initial_capital=1_000_000),
     "J": dict(ma_type="SMA", fast_period=10, slow_period=30, initial_capital=1_000_000),
+    "K": dict(drop_trigger_pct=5, partial_exit_pct=50, short_take_profit_pct=5,
+              short_stop_loss_pct=3, initial_capital=1_000_000),
 }
 
 

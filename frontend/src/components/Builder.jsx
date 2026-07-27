@@ -213,7 +213,7 @@ export default function Builder({ form, setForm }) {
               ? "현물 캔들"
               : form.market === "futures"
               ? "선물 캔들 + 실제 펀딩비 반영 가능"
-              : isShort || Number(form.leverage) > 1
+              : isShort || Number(form.leverage) > 1 || rt === "K"
               ? "선물 캔들 (숏/레버리지라 자동 선택)"
               : "현물 캔들 (롱·1배라 자동 선택)"),
         }
@@ -331,6 +331,20 @@ export default function Builder({ form, setForm }) {
             {sel("exit_signal", "청산 신호 exit_signal", [{ value: "dead_cross", label: "데드크로스" }, { value: "take_profit", label: "익절" }, { value: "both", label: "둘 중 먼저" }])}
             {num("take_profit", "익절률 take_profit (%)", { hint: "exit_signal 익절/both일 때" })}
             {cap}
+          </div>
+        )}
+
+        {rt === "K" && (
+          <div className="grid grid-cols-2 gap-4">
+            {num("drop_trigger_pct", "방어 발동 하락률 drop_trigger_pct (%)", { hint: "진입가 대비 이만큼 하락하면 방어 발동" })}
+            {num("partial_exit_pct", "부분 매도 비율 partial_exit_pct (%)", { hint: "발동 시 보유량의 몇 %를 매도" })}
+            {chk("flip_to_short", "부분 매도 후 숏 전환 flip_to_short")}
+            {num("long_take_profit_pct", "롱 익절률 long_take_profit (%)", { hint: "비우면 방어로만 청산" })}
+            {num("short_take_profit_pct", "숏 익절률 short_take_profit (%)", { hint: "숏 전환 후 추가 하락 시 익절" })}
+            {num("short_stop_loss_pct", "숏 손절률 short_stop_loss (%)", { hint: "반등 시 손절 (필수)" })}
+            {chk("reenter_long_after", "숏 종료 후 롱 재진입 reenter_long_after")}
+            {cap}
+            <div className="col-span-2 text-xs text-amber-600">숏 다리 때문에 선물(USDT-M)로 실행됩니다. 숏 손절(short_stop_loss)은 필수예요.</div>
           </div>
         )}
       </div>

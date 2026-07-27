@@ -88,4 +88,10 @@ def _new_type_core(rt: RuleType, p: dict) -> str:
         return f"변동성 돌파 (k={_num(p['k'])})"
     if rt is RuleType.J:
         return f"{p.get('ma_type', 'SMA')} {int(p['fast_period'])}/{int(p['slow_period'])} 골든크로스"
+    if rt is RuleType.K:
+        core = f"롱 → −{_num(p['drop_trigger_pct'])}% 하락 시 {_num(p['partial_exit_pct'])}% 매도"
+        if p.get("flip_to_short", True):
+            core += " 후 숏 전환"
+        core += f" (숏 익절 {_num(p['short_take_profit_pct'])}% / 손절 {_num(p['short_stop_loss_pct'])}%)"
+        return core
     return rt.value
