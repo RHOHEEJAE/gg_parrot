@@ -36,6 +36,9 @@ from . import leaderboard as leaderboard_mod
 from . import optimize as optimize_mod
 from . import paper as paper_mod
 from . import ai_explain as ai_explain_mod
+from . import auth as auth_mod
+from fastapi import Depends
+from .db import User
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
 # from . import whales as whales_mod
 from .card import render_card
@@ -129,6 +132,17 @@ class OptimizeRequest(BaseModel):
     sl_values: Optional[List[float]] = None
 
 
+class SignupRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class ExplainAiRequest(BaseModel):
     macro: Macro
     period_override: Optional[Period] = None
@@ -170,6 +184,24 @@ class ChatPostRequest(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True, "disclaimer": "past simulation only; no live trading"}
+
+
+# --- auth / account ----------------------------------------------------
+@app.post("/api/auth/signup")
+def auth_signup(req: SignupRequest) -> dict:
+    """Create an account (email/username/password) and grant starter points."""
+    return auth_mod.signup(req.email, req.username, req.password)
+
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest) -> dict:
+    return auth_mod.login(req.email, req.password)
+
+
+@app.get("/api/auth/me")
+def auth_me(user: User = Depends(auth_mod.current_user)) -> dict:
+    """Current account (from the Bearer token), including the points balance."""
+    return {"user": auth_mod.user_view(user)}
 
 
 @app.post("/api/macros")
