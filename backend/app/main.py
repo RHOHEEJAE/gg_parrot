@@ -37,6 +37,7 @@ from . import optimize as optimize_mod
 from . import paper as paper_mod
 from . import ai_explain as ai_explain_mod
 from . import auth as auth_mod
+from . import points as points_mod
 from fastapi import Depends
 from .db import User
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
@@ -512,15 +513,28 @@ def _edit_rate_fail(entry_id: int, ip: str) -> None:
 
 
 @app.post("/api/leaderboard/register")
-async def leaderboard_register(req: LeaderboardRegisterRequest) -> dict:
+async def leaderboard_register(
+    req: LeaderboardRegisterRequest,
+    account: Optional[User] = Depends(auth_mod.optional_user),
+) -> dict:
     """Register a macro: start its paper session and add it to today's board.
 
-    Requires a display id + password (password stored hashed, never returned).
-    Rejects symbols with no spot data (422) so no fabricated entry is created.
+    If logged in, the entry is owned by that account (it earns the creator share
+    when others unlock it). Anonymous registration still works (legacy: display id
+    + password) and stays fully visible/free. Rejects symbols with no spot data.
     """
-    if not req.username.strip() or not req.password:
-        raise HTTPException(status_code=400, detail="아이디와 비밀번호를 모두 입력하세요.")
     macro = req.macro
+    if account is not None:
+        owner_user_id = account.id
+        username = account.username
+        password_hash = ""  # account-owned; edited via the account, not a password
+    else:
+        if not req.username.strip() or not req.password:
+            raise HTTPException(status_code=400, detail="아이디와 비밀번호를 모두 입력하세요.")
+        owner_user_id = None
+        username = req.username
+        password_hash = hash_password(req.password)
+
     mode = "replay" if req.mode == "replay" else "live"
     try:
         info = await paper_mod.start_session(macro, macro.symbol, mode)
@@ -528,8 +542,9 @@ async def leaderboard_register(req: LeaderboardRegisterRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc))
     entry = leaderboard_mod.create_entry(
         user_id=req.user_id,
-        username=req.username,
-        password_hash=hash_password(req.password),
+        username=username,
+        password_hash=password_hash,
+        owner_user_id=owner_user_id,
         symbol=macro.symbol,
         macro_json=macro.model_dump_json(),
         human_summary=human_summary(macro),
@@ -539,8 +554,21 @@ async def leaderboard_register(req: LeaderboardRegisterRequest) -> dict:
 
 
 @app.get("/api/leaderboard")
-def leaderboard_list(user_id: str = "") -> dict:
-    return leaderboard_mod.list_entries(viewer_id=user_id)
+def leaderboard_list(user_id: str = "", account: Optional[User] = Depends(auth_mod.optional_user)) -> dict:
+    return leaderboard_mod.list_entries(
+        viewer_id=user_id, viewer_user_id=account.id if account else None
+    )
+
+
+@app.post("/api/leaderboard/{entry_id}/unlock")
+def leaderboard_unlock(entry_id: int, account: User = Depends(auth_mod.current_user)) -> dict:
+    """Spend points to reveal+copy an entry's macro; 70% goes to its creator."""
+    try:
+        return leaderboard_mod.unlock_entry(account, entry_id)
+    except leaderboard_mod.UnlockError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+    except points_mod.InsufficientPoints as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
 
 
 @app.post("/api/leaderboard/{entry_id}/vote")

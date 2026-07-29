@@ -84,6 +84,9 @@ class LeaderboardEntry(SQLModel, table=True):
     nickname: str
     username: str = ""  # display id chosen at register time (v7)
     password_hash: str = ""  # PBKDF2 hash for edit ownership; never returned (v7)
+    # Marketplace: the registered account that owns this entry and receives the
+    # creator share when others unlock it. None for legacy anonymous entries.
+    owner_user_id: Optional[int] = Field(default=None, index=True)
     symbol: str
     macro_json: str
     human_summary: str
@@ -192,6 +195,7 @@ def _migrate() -> None:
         "leaderboardentry": {
             "username": "ALTER TABLE leaderboardentry ADD COLUMN username TEXT DEFAULT ''",
             "password_hash": "ALTER TABLE leaderboardentry ADD COLUMN password_hash TEXT DEFAULT ''",
+            "owner_user_id": "ALTER TABLE leaderboardentry ADD COLUMN owner_user_id INTEGER",
         },
         "papersession": {
             "liquidations": "ALTER TABLE papersession ADD COLUMN liquidations INTEGER DEFAULT 0",

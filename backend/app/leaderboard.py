@@ -11,16 +11,31 @@ instead of ``zoneinfo`` to avoid a tz-database dependency on Windows.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlmodel import select
 
 from . import paper as paper_mod
-from .db import LeaderboardEntry, LeaderboardVote, get_session
+from . import points as points_mod
+from .db import LeaderboardEntry, LeaderboardVote, MacroUnlock, User, get_session
 from .security import verify_password
 
 KST = timezone(timedelta(hours=9))
+
+# 👑 왕관 기준(누적, env 조정 가능): 판매량과 누적 좋아요가 모두 이 이상인 셀러.
+CROWN_MIN_SALES = int(os.environ.get("CROWN_MIN_SALES", "3"))
+CROWN_MIN_LIKES = int(os.environ.get("CROWN_MIN_LIKES", "3"))
+
+
+class UnlockError(Exception):
+    """Raised when an unlock can't proceed (own entry, no owner, already done…)."""
+
+    def __init__(self, message: str, *, status: int = 400) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status = status
 
 
 # --- KST time helpers ---------------------------------------------------
@@ -59,6 +74,7 @@ def create_entry(
     macro_json: str,
     human_summary: str,
     paper_session_id: Optional[int],
+    owner_user_id: Optional[int] = None,
 ) -> dict:
     now = _now_utc()
     created_ms = int(now.timestamp() * 1000)
@@ -68,6 +84,7 @@ def create_entry(
         nickname=name,
         username=name,
         password_hash=password_hash,
+        owner_user_id=owner_user_id,
         symbol=symbol,
         macro_json=macro_json,
         human_summary=human_summary,
@@ -79,7 +96,8 @@ def create_entry(
         db.add(row)
         db.commit()
         db.refresh(row)
-    return _entry_view(row, {}, viewer_id=user_id)
+    # The creator sees their own new entry unlocked.
+    return _entry_view(row, {}, viewer_id=user_id, viewer_user_id=owner_user_id)
 
 
 def get_entry(entry_id: int) -> Optional[LeaderboardEntry]:
@@ -116,7 +134,8 @@ def update_entry(
         db.commit()
         db.refresh(row)
         viewer = row.user_id
-    return _entry_view(row, {}, viewer_id=viewer)
+        owner = row.owner_user_id
+    return _entry_view(row, {}, viewer_id=viewer, viewer_user_id=owner)
 
 
 def _vote_tallies(db, entry_ids: list[int]) -> dict[int, dict]:
@@ -147,23 +166,45 @@ def _live_return(session_id: Optional[int]) -> tuple[Optional[float], Optional[f
     return status.get("current_return"), status.get("current_equity"), status.get("status", "unknown")
 
 
-def _entry_view(row: LeaderboardEntry, tally: dict, *, viewer_id: str) -> dict:
+def _entry_view(
+    row: LeaderboardEntry,
+    tally: dict,
+    *,
+    viewer_id: str,
+    viewer_user_id: Optional[int] = None,
+    unlocked_ids: frozenset = frozenset(),
+    crown_owner_ids: frozenset = frozenset(),
+) -> dict:
     ret, equity, pstatus = _live_return(row.paper_session_id)
     likes = tally.get("likes", 0)
     dislikes = tally.get("dislikes", 0)
     my_vote = tally.get("by_user", {}).get(viewer_id, 0)
-    try:
-        macro = json.loads(row.macro_json)
-    except (ValueError, TypeError):
-        macro = None
+
+    # Gating: owned entries are LOCKED (macro + summary hidden) until the viewer
+    # is the owner or has paid to unlock. Legacy anonymous entries (no owner) stay
+    # fully visible, so nothing that worked before breaks.
+    has_owner = row.owner_user_id is not None
+    is_owner = has_owner and viewer_user_id is not None and row.owner_user_id == viewer_user_id
+    unlocked = (not has_owner) or is_owner or (row.id in unlocked_ids)
+
+    macro = None
+    summary = ""
+    if unlocked:
+        try:
+            macro = json.loads(row.macro_json)
+        except (ValueError, TypeError):
+            macro = None
+        summary = row.human_summary
+
     # NOTE: password_hash is intentionally never included in the view.
     return {
         "id": row.id,
         "username": row.username or row.nickname,
         "nickname": row.nickname,
         "symbol": row.symbol,
-        "human_summary": row.human_summary,
-        "macro": macro,  # for "매크로 복사하기 → 빌더" prefill
+        # Locked: summary/macro withheld so only id·종목·등락률이 노출된다.
+        "human_summary": summary,
+        "macro": macro,  # for "매크로 복사하기 → 빌더" prefill (unlocked only)
         "return_pct": ret,
         "equity": equity,
         "paper_status": pstatus,
@@ -175,19 +216,84 @@ def _entry_view(row: LeaderboardEntry, tally: dict, *, viewer_id: str) -> dict:
         "created_at": row.created_at,
         "created_kst": _kst_hhmm(row.created_ms),
         "is_mine": row.user_id == viewer_id,
+        # marketplace fields
+        "for_sale": has_owner,  # false for legacy anonymous entries
+        "locked": not unlocked,
+        "unlocked": unlocked,
+        "is_owner": is_owner,
+        "unlock_price": points_mod.UNLOCK_PRICE if (has_owner and not unlocked) else 0,
+        "crown": has_owner and row.owner_user_id in crown_owner_ids,
     }
 
 
-def list_entries(viewer_id: str = "") -> dict:
-    """Today's (KST) entries, sorted by likes-score then live return."""
+def _unlocked_ids_for(db, viewer_user_id: Optional[int], entry_ids: list[int]) -> frozenset:
+    """Entry ids this account has already paid to unlock (so we don't re-charge)."""
+    if viewer_user_id is None or not entry_ids:
+        return frozenset()
+    rows = db.exec(
+        select(MacroUnlock.entry_id).where(
+            MacroUnlock.user_id == viewer_user_id, MacroUnlock.entry_id.in_(entry_ids)
+        )
+    ).all()
+    return frozenset(rows)
+
+
+def _crown_owner_ids(db, owner_ids: list[int]) -> frozenset:
+    """Owners whose ALL-TIME sales and cumulative likes both clear the crown bar."""
+    owners = [o for o in {o for o in owner_ids if o is not None}]
+    if not owners:
+        return frozenset()
+    # Every entry each owner has ever posted (crown is a lifetime reputation).
+    entries = db.exec(
+        select(LeaderboardEntry.id, LeaderboardEntry.owner_user_id).where(
+            LeaderboardEntry.owner_user_id.in_(owners)
+        )
+    ).all()
+    entry_owner = {eid: oid for eid, oid in entries}
+    all_entry_ids = list(entry_owner.keys())
+    if not all_entry_ids:
+        return frozenset()
+    sales = {o: 0 for o in owners}
+    for eid in db.exec(select(MacroUnlock.entry_id).where(MacroUnlock.entry_id.in_(all_entry_ids))):
+        owner = entry_owner.get(eid)
+        if owner is not None:
+            sales[owner] += 1
+    likes = {o: 0 for o in owners}
+    for v in db.exec(select(LeaderboardVote).where(LeaderboardVote.entry_id.in_(all_entry_ids))):
+        if v.value > 0:
+            owner = entry_owner.get(v.entry_id)
+            if owner is not None:
+                likes[owner] += 1
+    return frozenset(
+        o for o in owners
+        if sales[o] >= CROWN_MIN_SALES and likes[o] >= CROWN_MIN_LIKES
+    )
+
+
+def list_entries(viewer_id: str = "", viewer_user_id: Optional[int] = None) -> dict:
+    """Today's (KST) entries, sorted by likes-score then live return.
+
+    ``viewer_user_id`` (the logged-in account) drives per-viewer unlock state and
+    ownership; ``viewer_id`` (anonymous localStorage id) still drives votes.
+    """
     start_ms = today_start_ms()
     with get_session() as db:
         rows = db.exec(
             select(LeaderboardEntry).where(LeaderboardEntry.created_ms >= start_ms)
         ).all()
-        tallies = _vote_tallies(db, [r.id for r in rows])
+        entry_ids = [r.id for r in rows]
+        tallies = _vote_tallies(db, entry_ids)
+        unlocked_ids = _unlocked_ids_for(db, viewer_user_id, entry_ids)
+        crown_ids = _crown_owner_ids(db, [r.owner_user_id for r in rows])
 
-    items = [_entry_view(r, tallies.get(r.id, {}), viewer_id=viewer_id) for r in rows]
+    items = [
+        _entry_view(
+            r, tallies.get(r.id, {}),
+            viewer_id=viewer_id, viewer_user_id=viewer_user_id,
+            unlocked_ids=unlocked_ids, crown_owner_ids=crown_ids,
+        )
+        for r in rows
+    ]
     # v7: default sort is live RETURN desc; tie-break by earliest registration.
     # Stable two-pass: sort by created_at asc first, then by return desc so equal
     # returns keep the earlier entry on top; entries with no return yet sink last.
@@ -227,3 +333,49 @@ def vote(entry_id: int, user_id: str, value: int) -> dict:
         "dislikes": tally["dislikes"],
         "my_vote": tally["by_user"].get(user_id, 0),
     }
+
+
+def unlock_entry(viewer: User, entry_id: int) -> dict:
+    """Pay points to reveal+copy an entry's macro; 70% goes to the creator.
+
+    Atomic, idempotent, and self-protecting: re-unlocking is free, and you can't
+    unlock your own or an ownerless (free) entry. Raises :class:`UnlockError` or
+    :class:`points.InsufficientPoints` on the respective failures.
+    """
+    with get_session() as db:
+        row = db.get(LeaderboardEntry, entry_id)
+        if row is None:
+            raise UnlockError("엔트리를 찾을 수 없어요.", status=404)
+        if row.owner_user_id is None:
+            raise UnlockError("이 매크로는 무료 공개라 언락이 필요 없어요.")
+        if row.owner_user_id == viewer.id:
+            raise UnlockError("내 매크로예요. 이미 볼 수 있어요.")
+
+        already = db.exec(
+            select(MacroUnlock).where(
+                MacroUnlock.user_id == viewer.id, MacroUnlock.entry_id == entry_id
+            )
+        ).first()
+
+        viewer_row = db.get(User, viewer.id)
+        if already is None:
+            creator = db.get(User, row.owner_user_id)
+            if creator is None:
+                raise UnlockError("작성자 계정을 찾을 수 없어요.", status=404)
+            # charge viewer, pay creator 70%, record the unlock — all in one commit.
+            # Read the price at call time so it stays configurable/testable.
+            points_mod.unlock_transfer(
+                db, viewer=viewer_row, creator=creator, entry_id=entry_id,
+                price=points_mod.UNLOCK_PRICE,
+            )
+            db.commit()
+            db.refresh(viewer_row)
+
+        tally = _vote_tallies(db, [entry_id])[entry_id]
+        unlocked_ids = frozenset({entry_id})
+        crown_ids = _crown_owner_ids(db, [row.owner_user_id])
+        entry = _entry_view(
+            row, tally, viewer_id="",
+            viewer_user_id=viewer.id, unlocked_ids=unlocked_ids, crown_owner_ids=crown_ids,
+        )
+        return {"entry": entry, "points_balance": viewer_row.points_balance}
