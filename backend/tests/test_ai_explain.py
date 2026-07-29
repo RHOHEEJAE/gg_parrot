@@ -1,17 +1,20 @@
-"""AI enrichment layer — key gating, graceful fallback, response parsing.
+"""AI 원인 분석 층 — BYOK key, graceful fallback, error surfacing, parsing.
 
 No real network calls: the Gemini HTTP client is monkeypatched. Verifies the
 feature is OFF (rule-based) without a key, degrades to rule-based on bad/failed
-responses, and maps a well-formed model reply onto the Explanation schema.
+responses (raising AiError with a friendly message from ``generate``), and maps a
+well-formed model reply onto the Explanation schema with the key sent in a header.
 """
 from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app import ai_explain
+from app.ai_explain import AiError
 from app.engine.backtest import BacktestResult
 from app.engine.explain import Explanation
 from app.engine.schema import Macro
@@ -35,22 +38,21 @@ def _result():
 
 
 class _FakeResp:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
-
-    def raise_for_status(self):
-        pass
+        self.status_code = status_code
 
     def json(self):
         return self._payload
 
 
 class _FakeClient:
-    """Stands in for httpx.Client; returns a canned Gemini generateContent body."""
+    """Stands in for httpx.Client; returns a canned generateContent body."""
 
-    def __init__(self, model_json, capture=None):
+    def __init__(self, model_json, capture=None, status_code=200):
         self._model_json = model_json
         self._capture = capture
+        self._status = status_code
 
     def __enter__(self):
         return self
@@ -62,49 +64,62 @@ class _FakeClient:
         if self._capture is not None:
             self._capture["url"] = url
             self._capture["headers"] = headers or {}
-        return _FakeResp({"candidates": [{"content": {"parts": [{"text": self._model_json}]}}]})
+        body = {"candidates": [{"content": {"parts": [{"text": self._model_json}]}}]}
+        return _FakeResp(body, status_code=self._status)
+
+
+def _good_json():
+    return json.dumps({
+        "mood": "win",
+        "headline": "익절 목표가 촘촘해 추세를 놓쳤어",
+        "points": ["승률은 60%지만 홀딩보다 앞섰어", "MDD 9%로 낙폭은 얕았어"],
+    }, ensure_ascii=False)
 
 
 def test_no_key_returns_rule_based(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    assert ai_explain.ai_available() is False
-    out = ai_explain.enrich(_macro(), _result())
+    out = ai_explain.enrich(_macro(), _result())  # no api_key, no env
     assert isinstance(out, Explanation)
     assert out.source == "rule"
 
 
-def test_valid_model_reply_maps_to_ai_explanation(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+def test_byok_key_generates_ai_and_uses_header(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # env empty; key comes per-call
     captured = {}
-    model_json = json.dumps({
-        "mood": "win",
-        "headline": "🦜 오 좀 하는데?",
-        "points": ["홀딩보다 앞섰어", "MDD도 얕았어"],
-        "lesson": "다른 기간에도 되는지 확인해봐.",
-    }, ensure_ascii=False)
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(model_json, captured))
-
-    out = ai_explain.enrich(_macro(), _result())
+    monkeypatch.setattr(ai_explain.httpx, "Client",
+                        lambda *a, **k: _FakeClient(_good_json(), captured))
+    out = ai_explain.generate(_macro(), _result(), api_key="user-key-123")
     assert out.source == "ai"
-    assert out.headline.startswith("🦜")
     assert out.mood == "win"
     assert len(out.points) == 2
-    # the API key must travel in a header, never in the URL.
-    assert captured["headers"].get("x-goog-api-key") == "test-key"
-    assert "test-key" not in captured["url"]
+    # BYOK key must travel in a header, never in the URL.
+    assert captured["headers"].get("x-goog-api-key") == "user-key-123"
+    assert "user-key-123" not in captured["url"]
 
 
-def test_incomplete_reply_falls_back(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    bad = json.dumps({"mood": "win", "headline": "", "points": [], "lesson": ""})
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(bad))
+def test_env_key_path_still_works(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "env-key")
+    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(_good_json()))
     out = ai_explain.enrich(_macro(), _result())
-    assert out.source == "rule"  # missing fields -> keep the reliable baseline
+    assert out.source == "ai"
 
 
-def test_network_error_falls_back(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+def test_incomplete_reply_raises_aierror(monkeypatch):
+    bad = json.dumps({"mood": "win", "headline": "", "points": []})
+    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(bad))
+    with pytest.raises(AiError):
+        ai_explain.generate(_macro(), _result(), api_key="k")
 
+
+def test_auth_status_raises_friendly_aierror(monkeypatch):
+    monkeypatch.setattr(ai_explain.httpx, "Client",
+                        lambda *a, **k: _FakeClient("{}", status_code=403))
+    with pytest.raises(AiError) as ei:
+        ai_explain.generate(_macro(), _result(), api_key="bad")
+    assert "키" in ei.value.user_message  # mentions the key problem
+
+
+def test_network_error_raises_aierror(monkeypatch):
     class _Boom:
         def __enter__(self):
             return self
@@ -113,11 +128,13 @@ def test_network_error_falls_back(monkeypatch):
             return False
 
         def post(self, *a, **k):
-            raise RuntimeError("network down")
+            raise httpx.ConnectError("down")
 
     monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _Boom())
-    out = ai_explain.enrich(_macro(), _result())
-    assert out.source == "rule"
+    with pytest.raises(AiError):
+        ai_explain.generate(_macro(), _result(), api_key="k")
+    # enrich swallows it and falls back to rule-based.
+    assert ai_explain.enrich(_macro(), _result(), api_key="k").source == "rule"
 
 
 def test_endpoint_reports_ai_unavailable_without_key(monkeypatch):
@@ -128,6 +145,7 @@ def test_endpoint_reports_ai_unavailable_without_key(monkeypatch):
             "params": {"take_profit_pct": 5, "initial_capital": 1_000_000},
             "risk": {"stop_loss_pct": 3}, "period": {"preset": "3m"},
         }
+        # no api_key -> feature off
     }
     res = client.post("/api/explain/ai", json=body)
     assert res.status_code == 200, res.text

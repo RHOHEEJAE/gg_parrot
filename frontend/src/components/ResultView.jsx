@@ -4,57 +4,91 @@ import InfoTooltip from "./InfoTooltip.jsx";
 import { fmtMoney, fmtMoneyCompact, fmtKrw } from "../lib/format.js";
 import { useUsdKrw } from "../lib/usdkrw.js";
 
-// 껄무새 mascot mood -> face + accent styling. Falls back to a neutral look for
-// any unknown mood so a new backend mood never breaks the card.
-const MOOD_STYLE = {
-  idle: { face: "😐", cls: "border-slate-300 bg-slate-50", accent: "text-slate-700" },
-  liquidated: { face: "💀", cls: "border-red-400 bg-red-50", accent: "text-red-700" },
-  crash: { face: "😱", cls: "border-red-300 bg-red-50", accent: "text-red-700" },
-  loss: { face: "😖", cls: "border-amber-300 bg-amber-50", accent: "text-amber-800" },
-  lost_to_hold: { face: "🙄", cls: "border-amber-300 bg-amber-50", accent: "text-amber-800" },
-  win: { face: "😎", cls: "border-green-300 bg-green-50", accent: "text-green-700" },
-  big_win: { face: "🎉", cls: "border-green-400 bg-green-50", accent: "text-green-700" },
+// mascot mood -> accent color for the AI analysis card (neutral fallback).
+const MOOD_ACCENT = {
+  idle: "text-slate-700",
+  liquidated: "text-red-700",
+  crash: "text-red-700",
+  loss: "text-amber-800",
+  lost_to_hold: "text-amber-800",
+  win: "text-green-700",
+  big_win: "text-green-700",
 };
 
-function ParrotExplain({ explanation, onAiExplain, aiBusy }) {
-  if (!explanation) return null;
-  const m = MOOD_STYLE[explanation.mood] || MOOD_STYLE.idle;
-  const isAi = explanation.source === "ai";
-  return (
-    <div className={"rounded-2xl border-2 p-5 " + m.cls}>
-      <div className="flex items-start gap-3">
-        <div className="text-3xl leading-none select-none" aria-hidden>🦜{m.face}</div>
-        <div className="min-w-0 flex-1">
-          <div className={"text-base font-extrabold " + m.accent}>{explanation.headline}</div>
-          {explanation.points?.length > 0 && (
-            <ul className="mt-2 space-y-1 text-sm text-slate-700 list-disc pl-5">
-              {explanation.points.map((p, i) => (
-                <li key={i}>{p}</li>
-              ))}
-            </ul>
-          )}
-          {explanation.lesson && (
-            <div className="mt-3 rounded-lg bg-white/70 border border-slate-200 px-3 py-2 text-sm text-slate-800">
-              <span className="font-bold">💡 오늘의 교훈 · </span>
-              {explanation.lesson}
-            </div>
-          )}
-          <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-            <div className="text-[11px] text-slate-400">
-              {isAi ? "✨ AI 심화 해설" : "🦜 껄무새 해설(규칙 기반)"} · {explanation.disclaimer}
-            </div>
-            {!isAi && onAiExplain && (
+const aiInputCls =
+  "w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
+  "focus:outline-none focus:ring-2 focus:ring-slate-500";
+
+// 껄무새 AI 원인 분석 카드. 규칙기반 장문 멘트는 쓰지 않고, 키를 넣으면 AI가
+// 결과 원인을 간결하게 분석한다(BYOK). 키는 이 브라우저에만 저장된다.
+function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError, geminiKey, onKeyChange }) {
+  const isAi = explanation && explanation.source === "ai";
+
+  // AI 분석 결과가 있을 때: 간결한 원인 분석만 렌더.
+  if (isAi) {
+    const accent = MOOD_ACCENT[explanation.mood] || MOOD_ACCENT.idle;
+    return (
+      <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 p-5">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl leading-none select-none" aria-hidden>🦜</div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold text-slate-500 mb-1">✨ AI 원인 분석</div>
+            <div className={"text-base font-extrabold " + accent}>{explanation.headline}</div>
+            {explanation.points?.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm text-slate-700 list-disc pl-5">
+                {explanation.points.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-[11px] text-slate-400">{explanation.disclaimer}</div>
               <button
                 type="button"
                 onClick={onAiExplain}
                 disabled={aiBusy}
-                className="rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-3 py-1.5 text-xs font-semibold text-white"
+                className="text-[11px] text-slate-500 underline disabled:opacity-40"
               >
-                {aiBusy ? "생각하는 중…" : "✨ AI 심화 해설"}
+                {aiBusy ? "분석 중…" : "다시 분석"}
               </button>
-            )}
+            </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // 아직 AI 분석 전: 키 입력 + 분석 버튼(BYOK). 규칙기반 장문은 노출하지 않음.
+  const hasKey = (geminiKey || "").trim().length > 0;
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface p-5">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+        🦜 AI 원인 분석
+        <span className="text-xs font-normal text-slate-400">이 결과가 왜 이렇게 나왔는지 분석해줘요</span>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <input
+          type="password"
+          className={aiInputCls}
+          placeholder="Gemini API 키 입력 (AIza…)"
+          value={geminiKey || ""}
+          onChange={(e) => onKeyChange && onKeyChange(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          onClick={onAiExplain}
+          disabled={aiBusy || !hasKey}
+          className="shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
+        >
+          {aiBusy ? "분석 중…" : "분석하기"}
+        </button>
+      </div>
+      {aiError && <div className="mt-2 text-xs text-red-600">{aiError}</div>}
+      <div className="mt-2 text-[11px] text-slate-400">
+        🔒 키는 이 브라우저에만 저장되고, 분석할 때만 서버를 거쳐 Google로 전송돼요. 공용 PC에서는 사용하지 마세요.{" "}
+        <a className="underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">키 발급</a>
       </div>
     </div>
   );
@@ -73,7 +107,7 @@ function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   );
 }
 
-export default function ResultView({ result, explanation, onAiExplain, aiBusy, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
+export default function ResultView({ result, explanation, onAiExplain, aiBusy, aiError, geminiKey, onKeyChange, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
   if (!result) return null;
   const r = result;
   const up = r.final_return_pct >= 0;
@@ -177,7 +211,14 @@ export default function ResultView({ result, explanation, onAiExplain, aiBusy, s
         />
       </div>
 
-      <ParrotExplain explanation={explanation} onAiExplain={onAiExplain} aiBusy={aiBusy} />
+      <ParrotExplain
+        explanation={explanation}
+        onAiExplain={onAiExplain}
+        aiBusy={aiBusy}
+        aiError={aiError}
+        geminiKey={geminiKey}
+        onKeyChange={onKeyChange}
+      />
 
       <div className="rounded-2xl bg-surface border border-slate-200 p-6">
         <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>

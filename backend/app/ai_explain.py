@@ -1,15 +1,15 @@
-"""Optional AI enrichment of the rule-based 껄무새 해설 (Google Gemini).
+"""AI 원인 분석(껄무새 해설의 AI 층) — Google Gemini.
 
-SERVER-SIDE ONLY. Reads ``GEMINI_API_KEY`` from the environment and calls the
-Gemini REST API (via the already-present ``httpx``) with the key in a request
-HEADER — never in the URL, never logged, never returned to the client. If the
-key is missing or the call fails/times out/returns junk, ``enrich`` returns the
-deterministic rule-based :class:`Explanation` unchanged, so the feature always
-degrades gracefully instead of erroring.
+SERVER-SIDE ONLY. The Gemini key comes either from the request (BYOK — the user
+types their own key in the UI) or from ``GEMINI_API_KEY`` in the environment. It
+is sent to Google in a request HEADER (never the URL), never logged, never
+stored, and never returned to the client.
 
-The model is given ONLY the already-computed metrics and told to translate them
-into the same ``Explanation`` shape (JSON mode) — it never invents numbers,
-predicts the future, or gives advice. Those guardrails live in ``_SYSTEM``.
+The model is given ONLY the already-computed backtest metrics and asked to
+explain — clearly and concisely — WHY the result turned out this way. It never
+invents numbers, predicts the future, or gives advice (guardrails in ``_SYSTEM``).
+On any failure ``generate`` raises :class:`AiError` with a user-friendly Korean
+message; ``enrich`` instead swallows it and returns the rule-based baseline.
 """
 from __future__ import annotations
 
@@ -24,42 +24,54 @@ from .engine.explain import MOODS, Explanation, explain_result
 from .engine.schema import Macro
 from .engine.summary import human_summary
 
-_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent"
+_DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 _TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "12"))
 
-# System instruction — the safety contract. Past-tense narration of THIS result
-# only; no advice, no prediction, Korean, 껄무새(후회하는 앵무새) 캐릭터 톤.
+# System instruction — the safety contract. Concise, cause-focused, past-only,
+# no advice, Korean.
 _SYSTEM = (
-    "너는 코인 백테스트 결과를 초보에게 설명해주는 '껄무새'(후회하는 앵무새) 캐릭터야. "
-    "규칙: (1) 반드시 한국어. (2) 주어진 숫자만 사용하고 새 수치를 지어내지 마. "
-    "(3) 과거 시뮬레이션 결과만 설명하고 미래를 예측하지 마. "
-    "(4) '사라/팔아라/추천' 같은 투자 조언·권유는 절대 금지. "
-    "(5) 친근하고 위트있게, 하지만 교육적으로. "
-    "출력은 반드시 지정된 JSON 스키마만."
+    "너는 코인 백테스트 결과의 '원인'을 초보에게 짧고 명확하게 설명하는 도우미야. "
+    "규칙: (1) 반드시 한국어. (2) 주어진 숫자만 근거로 쓰고 새로운 수치를 지어내지 마. "
+    "(3) 과거 결과가 '왜' 이렇게 나왔는지 원인만 분석하고, 미래 예측이나 "
+    "'사라/팔아라/추천' 같은 투자 조언은 절대 하지 마. "
+    "(4) 쉽고 간결하게, 군더더기 없이. 출력은 지정된 JSON 스키마만."
 )
 
-# Gemini structured-output schema -> maps 1:1 onto Explanation fields we let the
-# model write (source/disclaimer are fixed server-side).
+# Structured-output schema. We only ask for the cause analysis; ``lesson`` is
+# optional (kept for schema compatibility, usually empty now).
 _RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
         "mood": {"type": "string", "enum": list(MOODS)},
         "headline": {"type": "string"},
         "points": {"type": "array", "items": {"type": "string"}},
-        "lesson": {"type": "string"},
     },
-    "required": ["mood", "headline", "points", "lesson"],
+    "required": ["mood", "headline", "points"],
 }
+
+_USER_PROMPT = (
+    "다음 백테스트 지표(JSON)를 보고 '왜 이런 결과가 나왔는지' 원인을 분석해줘.\n"
+    "- headline: 핵심 원인을 한 문장으로 (간결하게)\n"
+    "- points: 원인이 된 요인 2~3개, 각각 한 줄로. 반드시 위 숫자를 근거로.\n"
+    "- mood: 결과 분위기 (아래 값 중 하나)\n"
+    "지표:\n"
+)
+
+
+class AiError(Exception):
+    """Raised by ``generate`` with a user-facing Korean message."""
+
+    def __init__(self, user_message: str) -> None:
+        super().__init__(user_message)
+        self.user_message = user_message
 
 
 def ai_available() -> bool:
-    """True when a Gemini key is configured (feature is on)."""
+    """True when a Gemini key is configured via the environment (server default)."""
     return bool(os.environ.get("GEMINI_API_KEY"))
 
 
 def _facts(macro: Macro, r: BacktestResult) -> str:
-    """The only ground truth the model may use — the computed metrics."""
     return json.dumps(
         {
             "요약": human_summary(macro),
@@ -86,51 +98,85 @@ def _extract_text(data: dict) -> Optional[str]:
         return None
 
 
-def enrich(macro: Macro, result: BacktestResult, base: Optional[Explanation] = None) -> Explanation:
-    """Return an AI-written Explanation, or ``base`` (rule-based) on any failure."""
-    if base is None:
-        base = explain_result(macro, result)
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        return base
-
+def generate(
+    macro: Macro,
+    result: BacktestResult,
+    *,
+    api_key: str,
+    model: Optional[str] = None,
+) -> Explanation:
+    """Call Gemini and return an AI Explanation. Raises :class:`AiError` on failure."""
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model or _DEFAULT_MODEL}:generateContent"
+    )
     payload = {
         "systemInstruction": {"parts": [{"text": _SYSTEM}]},
-        "contents": [{"role": "user", "parts": [{"text":
-            "다음 백테스트 지표(JSON)를 껄무새 톤으로 해설해줘. "
-            "points 는 각 항목이 위 숫자에 근거한 관찰 2~4개, lesson 은 교훈 1개.\n" + _facts(macro, result)
-        }]}],
+        "contents": [{"role": "user", "parts": [{"text": _USER_PROMPT + _facts(macro, result)}]}],
         "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": _RESPONSE_SCHEMA,
-            "temperature": 0.7,
+            "temperature": 0.6,
         },
     }
     try:
         with httpx.Client(timeout=_TIMEOUT) as client:
             resp = client.post(
-                _ENDPOINT,
-                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                endpoint,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
                 json=payload,
             )
-            resp.raise_for_status()
-            text = _extract_text(resp.json())
-        if not text:
-            return base
+    except httpx.RequestError:
+        raise AiError("네트워크 오류로 AI 호출에 실패했어요. 잠시 후 다시 시도해 주세요.")
+
+    if resp.status_code in (400, 401, 403):
+        raise AiError("API 키가 유효하지 않거나 권한이 없어요. 키를 다시 확인해 주세요.")
+    if resp.status_code == 404:
+        raise AiError("모델을 찾을 수 없어요. 모델 이름을 확인해 주세요 (기본: gemini-2.0-flash).")
+    if resp.status_code == 429:
+        raise AiError("요청이 많아 쿼터를 초과했어요. 잠시 후 다시 시도해 주세요.")
+    if resp.status_code >= 400:
+        raise AiError("AI 호출에 실패했어요.")
+
+    text = _extract_text(resp.json())
+    if not text:
+        raise AiError("AI 응답을 해석하지 못했어요.")
+    try:
         obj = json.loads(text)
-        mood = obj.get("mood")
-        points = [str(p) for p in obj.get("points", []) if str(p).strip()][:5]
-        headline = str(obj.get("headline", "")).strip()
-        lesson = str(obj.get("lesson", "")).strip()
-        if not headline or not lesson or not points:
-            return base  # incomplete -> keep the reliable baseline
-        return Explanation(
-            mood=mood if mood in MOODS else base.mood,
-            headline=headline,
-            points=points,
-            lesson=lesson,
-            source="ai",
-        )
+    except (json.JSONDecodeError, TypeError):
+        raise AiError("AI 응답 형식이 올바르지 않아요.")
+
+    headline = str(obj.get("headline", "")).strip()
+    points = [str(p) for p in obj.get("points", []) if str(p).strip()][:5]
+    if not headline or not points:
+        raise AiError("AI 응답이 비어 있어요.")
+
+    base_mood = explain_result(macro, result).mood
+    mood = obj.get("mood")
+    return Explanation(
+        mood=mood if mood in MOODS else base_mood,
+        headline=headline,
+        points=points,
+        lesson=str(obj.get("lesson", "")).strip(),
+        source="ai",
+    )
+
+
+def enrich(
+    macro: Macro,
+    result: BacktestResult,
+    base: Optional[Explanation] = None,
+    *,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Explanation:
+    """Return an AI Explanation, or the rule-based ``base`` on any failure."""
+    if base is None:
+        base = explain_result(macro, result)
+    key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not key:
+        return base
+    try:
+        return generate(macro, result, api_key=key, model=model)
     except Exception:
-        # Network / auth / quota / malformed JSON -> silent, safe fallback.
         return base

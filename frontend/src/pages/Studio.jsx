@@ -9,6 +9,7 @@ import OptimizePanel from "../components/OptimizePanel.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import { api } from "../api.js";
 import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
+import { getGeminiKey, setGeminiKey } from "../lib/aikey.js";
 
 export default function Studio() {
   const { slug } = useParams();
@@ -17,7 +18,9 @@ export default function Studio() {
   const [form, setForm] = useState(defaultForm());
   const [result, setResult] = useState(null);
   const [explanation, setExplanation] = useState(null); // 껄무새 해설 (rule-based; AI로 교체 가능)
-  const [aiBusy, setAiBusy] = useState(false); // AI 심화 해설 요청 중
+  const [aiBusy, setAiBusy] = useState(false); // AI 원인 분석 요청 중
+  const [aiError, setAiError] = useState(""); // AI 실패 사유(키 오류 등)
+  const [geminiKey, setGeminiKeyState] = useState(() => getGeminiKey()); // BYOK (브라우저 저장)
   const [summary, setSummary] = useState("");
   const [dataSource, setDataSource] = useState("");
   const [periodLabel, setPeriodLabel] = useState("");
@@ -103,6 +106,7 @@ export default function Studio() {
       const data = await api.backtest(macro);
       setResult(data.result);
       setExplanation(data.explanation || null);
+      setAiError("");
       setSummary(data.human_summary);
       setDataSource(data.data_source);
       setPeriodLabel(data.period_label);
@@ -134,15 +138,27 @@ export default function Studio() {
     }
   }
 
+  function updateGeminiKey(v) {
+    setGeminiKeyState(v);
+    setGeminiKey(v); // persist to this browser only
+  }
+
   async function enrichExplanation() {
     if (aiBusy || !result) return;
+    const key = (geminiKey || "").trim();
+    if (!key) {
+      setAiError("먼저 Gemini API 키를 입력해 주세요.");
+      return;
+    }
     setAiBusy(true);
+    setAiError("");
     try {
       const macro = buildMacro(form);
-      const data = await api.explainAi(macro);
+      const data = await api.explainAi(macro, key);
       if (data.explanation) setExplanation(data.explanation);
+      if (data.ai_error) setAiError(data.ai_error);
     } catch (e) {
-      setError("AI 해설 실패: " + String(e.message || e));
+      setAiError("AI 호출 실패: " + String(e.message || e));
     } finally {
       setAiBusy(false);
     }
@@ -211,7 +227,20 @@ export default function Studio() {
         )}
 
         {result && (
-          <ResultView result={result} explanation={explanation} onAiExplain={enrichExplanation} aiBusy={aiBusy} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} leverage={runLeverage} />
+          <ResultView
+            result={result}
+            explanation={explanation}
+            onAiExplain={enrichExplanation}
+            aiBusy={aiBusy}
+            aiError={aiError}
+            geminiKey={geminiKey}
+            onKeyChange={updateGeminiKey}
+            summary={summary}
+            dataSource={dataSource}
+            periodLabel={periodLabel}
+            symbol={form.symbol}
+            leverage={runLeverage}
+          />
         )}
 
         {result && form.rule_type === "A" && (

@@ -129,6 +129,15 @@ class OptimizeRequest(BaseModel):
     sl_values: Optional[List[float]] = None
 
 
+class ExplainAiRequest(BaseModel):
+    macro: Macro
+    period_override: Optional[Period] = None
+    # BYOK: the user's own Gemini key from the UI (used in-memory, never stored).
+    # Falls back to the server env GEMINI_API_KEY when omitted.
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+
+
 class BundleRequest(BaseModel):
     macro: Macro
 
@@ -258,19 +267,15 @@ _AI_EXPLAIN_CACHE_MAX = 500
 
 
 @app.post("/api/explain/ai")
-def explain_ai(req: BacktestRequest) -> dict:
-    """On-demand AI enrichment of the 껄무새 해설. Falls back to the rule-based
-    explanation (same schema) when no key is configured or the model fails."""
+def explain_ai(req: ExplainAiRequest) -> dict:
+    """On-demand AI 원인 분석. The key comes from the UI (BYOK) or the server env.
+    Always returns a valid ``explanation``: on any AI failure it falls back to the
+    rule-based one (same schema) and reports ``ai_error`` so the UI can hint why."""
     macro = req.macro
     if req.period_override is not None:
         macro = macro.model_copy(update={"period": req.period_override})
 
-    available = ai_explain_mod.ai_available()
-    cache_key = macro.model_dump_json() if available else None
-    if cache_key is not None:
-        hit = _ai_explain_cache.get(cache_key)
-        if hit is not None:
-            return {"explanation": hit, "ai_available": True, "cached": True}
+    key = (req.api_key or "").strip() or os.environ.get("GEMINI_API_KEY")
 
     try:
         result, _, _ = _run_for_macro(macro)
@@ -279,14 +284,30 @@ def explain_ai(req: BacktestRequest) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    if not available:
+    if not key:
         return {"explanation": explain_result(macro, result).model_dump(), "ai_available": False}
 
-    enriched = ai_explain_mod.enrich(macro, result).model_dump()
+    # Deterministic backtest -> (macro, model) fully determines the AI text, so
+    # cache successful results and skip the LLM on repeats. Never cache failures.
+    cache_key = macro.model_dump_json() + "|" + (req.model or "")
+    hit = _ai_explain_cache.get(cache_key)
+    if hit is not None:
+        return {"explanation": hit, "ai_available": True, "cached": True}
+
+    try:
+        enriched = ai_explain_mod.generate(macro, result, api_key=key, model=req.model)
+    except ai_explain_mod.AiError as exc:
+        base = explain_result(macro, result).model_dump()
+        return {"explanation": base, "ai_available": True, "ai_error": exc.user_message}
+    except Exception:
+        base = explain_result(macro, result).model_dump()
+        return {"explanation": base, "ai_available": True, "ai_error": "AI 호출에 실패했어요."}
+
+    payload = enriched.model_dump()
     if len(_ai_explain_cache) >= _AI_EXPLAIN_CACHE_MAX:
         _ai_explain_cache.clear()
-    _ai_explain_cache[cache_key] = enriched
-    return {"explanation": enriched, "ai_available": True}
+    _ai_explain_cache[cache_key] = payload
+    return {"explanation": payload, "ai_available": True}
 
 
 @app.post("/api/optimize")
