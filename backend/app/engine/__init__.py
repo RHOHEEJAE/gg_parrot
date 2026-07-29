@@ -8,6 +8,7 @@ from .schema import (
 )
 from .backtest import BacktestResult, run_backtest
 from .summary import human_summary
+from .explain import Explanation, explain_result
 
 __all__ = [
     "Fees",
@@ -19,4 +20,6 @@ __all__ = [
     "BacktestResult",
     "run_backtest",
     "human_summary",
+    "Explanation",
+    "explain_result",
 ]

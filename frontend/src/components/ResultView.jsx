@@ -4,6 +4,50 @@ import InfoTooltip from "./InfoTooltip.jsx";
 import { fmtMoney, fmtMoneyCompact, fmtKrw } from "../lib/format.js";
 import { useUsdKrw } from "../lib/usdkrw.js";
 
+// 껄무새 mascot mood -> face + accent styling. Falls back to a neutral look for
+// any unknown mood so a new backend mood never breaks the card.
+const MOOD_STYLE = {
+  idle: { face: "😐", cls: "border-slate-300 bg-slate-50", accent: "text-slate-700" },
+  liquidated: { face: "💀", cls: "border-red-400 bg-red-50", accent: "text-red-700" },
+  crash: { face: "😱", cls: "border-red-300 bg-red-50", accent: "text-red-700" },
+  loss: { face: "😖", cls: "border-amber-300 bg-amber-50", accent: "text-amber-800" },
+  lost_to_hold: { face: "🙄", cls: "border-amber-300 bg-amber-50", accent: "text-amber-800" },
+  win: { face: "😎", cls: "border-green-300 bg-green-50", accent: "text-green-700" },
+  big_win: { face: "🎉", cls: "border-green-400 bg-green-50", accent: "text-green-700" },
+};
+
+function ParrotExplain({ explanation }) {
+  if (!explanation) return null;
+  const m = MOOD_STYLE[explanation.mood] || MOOD_STYLE.idle;
+  return (
+    <div className={"rounded-2xl border-2 p-5 " + m.cls}>
+      <div className="flex items-start gap-3">
+        <div className="text-3xl leading-none select-none" aria-hidden>🦜{m.face}</div>
+        <div className="min-w-0 flex-1">
+          <div className={"text-base font-extrabold " + m.accent}>{explanation.headline}</div>
+          {explanation.points?.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm text-slate-700 list-disc pl-5">
+              {explanation.points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+          )}
+          {explanation.lesson && (
+            <div className="mt-3 rounded-lg bg-white/70 border border-slate-200 px-3 py-2 text-sm text-slate-800">
+              <span className="font-bold">💡 오늘의 교훈 · </span>
+              {explanation.lesson}
+            </div>
+          )}
+          <div className="mt-2 text-[11px] text-slate-400">
+            {explanation.source === "ai" ? "✨ AI 심화 해설" : "🦜 껄무새 해설(규칙 기반)"} ·{" "}
+            {explanation.disclaimer}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   return (
     <div className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3 min-w-0">
@@ -17,7 +61,7 @@ function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   );
 }
 
-export default function ResultView({ result, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
+export default function ResultView({ result, explanation, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
   if (!result) return null;
   const r = result;
   const up = r.final_return_pct >= 0;
@@ -120,6 +164,8 @@ export default function ResultView({ result, summary, dataSource, periodLabel, s
           color={(r.max_consecutive_losses || 0) >= 5 ? "text-red-600" : "text-slate-900"}
         />
       </div>
+
+      <ParrotExplain explanation={explanation} />
 
       <div className="rounded-2xl bg-surface border border-slate-200 p-6">
         <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>

@@ -34,6 +34,7 @@ from .marketdata import fetch_klines_for_macro
 from .db import MacroRow, get_session, init_db
 from .engine import BacktestResult, Macro, Period, human_summary
 from .engine.backtest import run_backtest
+from .engine.explain import explain_result
 from .engine.summary import _coin
 from .realtrade import build_bundle
 
@@ -197,6 +198,7 @@ def create_macro(macro: Macro) -> dict:
         "share_slug": slug,
         "human_summary": summary,
         "result": result.model_dump(),
+        "explanation": explain_result(macro, result).model_dump(),
         "data_source": source,
     }
 
@@ -231,6 +233,9 @@ def backtest(req: BacktestRequest) -> dict:
         "human_summary": human_summary(macro),
         "data_source": source,
         "period_label": period_label,
+        # 껄무새 해설: 규칙기반(무료·결정론)으로 항상 동봉. AI 심화층이 나중에 같은
+        # 스키마로 이 자리를 덮어써도 프론트는 그대로 렌더링됨.
+        "explanation": explain_result(macro, result).model_dump(),
         "disclaimer": "past simulation only; not real trading",
     }
 

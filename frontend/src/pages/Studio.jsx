@@ -16,6 +16,7 @@ export default function Studio() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [form, setForm] = useState(defaultForm());
   const [result, setResult] = useState(null);
+  const [explanation, setExplanation] = useState(null); // 껄무새 해설 (rule-based)
   const [summary, setSummary] = useState("");
   const [dataSource, setDataSource] = useState("");
   const [periodLabel, setPeriodLabel] = useState("");
@@ -100,6 +101,7 @@ export default function Studio() {
       const macro = buildMacro(form);
       const data = await api.backtest(macro);
       setResult(data.result);
+      setExplanation(data.explanation || null);
       setSummary(data.human_summary);
       setDataSource(data.data_source);
       setPeriodLabel(data.period_label);
@@ -119,6 +121,7 @@ export default function Studio() {
       const macro = buildMacro(form);
       const data = await api.createMacro(macro);
       setResult(data.result);
+      setExplanation(data.explanation || null);
       setSummary(data.human_summary);
       setDataSource(data.data_source);
       setRunLeverage(macro.leverage || 1);
@@ -193,7 +196,7 @@ export default function Studio() {
         )}
 
         {result && (
-          <ResultView result={result} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} leverage={runLeverage} />
+          <ResultView result={result} explanation={explanation} summary={summary} dataSource={dataSource} periodLabel={periodLabel} symbol={form.symbol} leverage={runLeverage} />
         )}
 
         {result && form.rule_type === "A" && (
