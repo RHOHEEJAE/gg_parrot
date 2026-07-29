@@ -26,6 +26,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ macro, period_override: periodOverride || null }),
     }),
+  // 껄무새 AI 심화 해설 (온디맨드). 키 미설정/실패 시 규칙기반 해설로 폴백해 응답.
+  explainAi: (macro, periodOverride) =>
+    req("/api/explain/ai", {
+      method: "POST",
+      body: JSON.stringify({ macro, period_override: periodOverride || null }),
+    }),
   // parameter sweep (익절/손절 자동 최적화). tpValues/slValues optional (server defaults).
   optimize: (macro, tpValues, slValues) =>
     req("/api/optimize", {

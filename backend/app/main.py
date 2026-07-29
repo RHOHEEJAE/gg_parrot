@@ -17,6 +17,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import select
 
+# Load backend/.env (gitignored) for local dev so secrets like GEMINI_API_KEY are
+# available before any module reads os.environ. No-op in prod (Render injects env
+# vars) and when python-dotenv isn't installed.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from . import chart as chart_mod
 from . import chat as chat_mod
 from . import hangang as hangang_mod
@@ -25,6 +35,7 @@ from . import kimchi as kimchi_mod
 from . import leaderboard as leaderboard_mod
 from . import optimize as optimize_mod
 from . import paper as paper_mod
+from . import ai_explain as ai_explain_mod
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
 # from . import whales as whales_mod
 from .card import render_card
@@ -238,6 +249,44 @@ def backtest(req: BacktestRequest) -> dict:
         "explanation": explain_result(macro, result).model_dump(),
         "disclaimer": "past simulation only; not real trading",
     }
+
+
+# AI 심화 해설 캐시: 백테스트가 결정론이라 (매크로 → 결과 → AI 텍스트)도 결정론.
+# 같은 매크로 재클릭은 LLM 재호출 없이 즉시 반환한다.
+_ai_explain_cache: dict[str, dict] = {}
+_AI_EXPLAIN_CACHE_MAX = 500
+
+
+@app.post("/api/explain/ai")
+def explain_ai(req: BacktestRequest) -> dict:
+    """On-demand AI enrichment of the 껄무새 해설. Falls back to the rule-based
+    explanation (same schema) when no key is configured or the model fails."""
+    macro = req.macro
+    if req.period_override is not None:
+        macro = macro.model_copy(update={"period": req.period_override})
+
+    available = ai_explain_mod.ai_available()
+    cache_key = macro.model_dump_json() if available else None
+    if cache_key is not None:
+        hit = _ai_explain_cache.get(cache_key)
+        if hit is not None:
+            return {"explanation": hit, "ai_available": True, "cached": True}
+
+    try:
+        result, _, _ = _run_for_macro(macro)
+    except NoSpotDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not available:
+        return {"explanation": explain_result(macro, result).model_dump(), "ai_available": False}
+
+    enriched = ai_explain_mod.enrich(macro, result).model_dump()
+    if len(_ai_explain_cache) >= _AI_EXPLAIN_CACHE_MAX:
+        _ai_explain_cache.clear()
+    _ai_explain_cache[cache_key] = enriched
+    return {"explanation": enriched, "ai_available": True}
 
 
 @app.post("/api/optimize")

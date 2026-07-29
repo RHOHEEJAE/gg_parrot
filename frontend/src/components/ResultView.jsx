@@ -16,9 +16,10 @@ const MOOD_STYLE = {
   big_win: { face: "🎉", cls: "border-green-400 bg-green-50", accent: "text-green-700" },
 };
 
-function ParrotExplain({ explanation }) {
+function ParrotExplain({ explanation, onAiExplain, aiBusy }) {
   if (!explanation) return null;
   const m = MOOD_STYLE[explanation.mood] || MOOD_STYLE.idle;
+  const isAi = explanation.source === "ai";
   return (
     <div className={"rounded-2xl border-2 p-5 " + m.cls}>
       <div className="flex items-start gap-3">
@@ -38,9 +39,20 @@ function ParrotExplain({ explanation }) {
               {explanation.lesson}
             </div>
           )}
-          <div className="mt-2 text-[11px] text-slate-400">
-            {explanation.source === "ai" ? "✨ AI 심화 해설" : "🦜 껄무새 해설(규칙 기반)"} ·{" "}
-            {explanation.disclaimer}
+          <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-[11px] text-slate-400">
+              {isAi ? "✨ AI 심화 해설" : "🦜 껄무새 해설(규칙 기반)"} · {explanation.disclaimer}
+            </div>
+            {!isAi && onAiExplain && (
+              <button
+                type="button"
+                onClick={onAiExplain}
+                disabled={aiBusy}
+                className="rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-3 py-1.5 text-xs font-semibold text-white"
+              >
+                {aiBusy ? "생각하는 중…" : "✨ AI 심화 해설"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -61,7 +73,7 @@ function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   );
 }
 
-export default function ResultView({ result, explanation, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
+export default function ResultView({ result, explanation, onAiExplain, aiBusy, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
   if (!result) return null;
   const r = result;
   const up = r.final_return_pct >= 0;
@@ -165,7 +177,7 @@ export default function ResultView({ result, explanation, summary, dataSource, p
         />
       </div>
 
-      <ParrotExplain explanation={explanation} />
+      <ParrotExplain explanation={explanation} onAiExplain={onAiExplain} aiBusy={aiBusy} />
 
       <div className="rounded-2xl bg-surface border border-slate-200 p-6">
         <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>
