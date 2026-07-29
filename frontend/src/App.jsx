@@ -1,6 +1,10 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Studio from "./pages/Studio.jsx";
 import Leaderboard from "./pages/Leaderboard.jsx";
+import Auth from "./pages/Auth.jsx";
+import { api } from "./api.js";
+import { useAuth, clearAuth, updateAuthUser } from "./lib/auth.js";
 import SimBadge from "./components/SimBadge.jsx";
 import KimchiBanner from "./components/KimchiBanner.jsx";
 import HangangTempBanner from "./components/HangangTempBanner.jsx";
@@ -32,10 +36,53 @@ function Nav() {
         </div>
         <div className="flex items-center gap-2">
           <SimBadge className="hidden sm:inline-flex" />
+          <AuthNav />
           <ThemeToggle />
         </div>
       </div>
     </header>
+  );
+}
+
+function AuthNav() {
+  const { token, user } = useAuth();
+  const navigate = useNavigate();
+
+  // Refresh the points balance from the server when logged in (keeps the header
+  // in sync after unlocks/earnings made in other tabs).
+  useEffect(() => {
+    if (!token) return;
+    api.me().then((d) => updateAuthUser(d.user)).catch(() => {});
+  }, [token]);
+
+  if (!token || !user) {
+    return (
+      <div className="flex items-center gap-1">
+        <button onClick={() => navigate("/login")}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900">
+          로그인
+        </button>
+        <button onClick={() => navigate("/login?mode=signup")}
+          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white">
+          회원가입
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hidden sm:inline text-sm text-slate-700 font-medium truncate max-w-[10rem]">
+        👤 {user.username}
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-800"
+        title="보유 포인트">
+        🪙 {(user.points_balance ?? 0).toLocaleString()}P
+      </span>
+      <button onClick={() => { clearAuth(); navigate("/"); }}
+        className="px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900">
+        로그아웃
+      </button>
+    </div>
   );
 }
 
@@ -51,6 +98,7 @@ export default function App() {
           <Route path="/" element={<Studio />} />
           <Route path="/s/:slug" element={<Studio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/login" element={<Auth />} />
           <Route path="/gallery" element={<Navigate to="/leaderboard" replace />} />
         </Routes>
       </main>

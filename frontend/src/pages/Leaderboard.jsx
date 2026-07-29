@@ -5,6 +5,7 @@ import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import ChatBox from "../components/ChatBox.jsx";
 import { api } from "../api.js";
 import { getUserId } from "../lib/user.js";
+import { useAuth, isLoggedIn, getAuthUser, updateAuthUser } from "../lib/auth.js";
 
 const pad = (n) => String(n).padStart(2, "0");
 const fmtCountdown = (s) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
@@ -18,7 +19,9 @@ function ret(e) {
 export default function Leaderboard() {
   const uid = getUserId();
   const navigate = useNavigate();
+  useAuth(); // re-render on login/logout so gating reflects the current account
   const [items, setItems] = useState([]);
+  const [unlocking, setUnlocking] = useState(0); // entry id being unlocked
   const [remain, setRemain] = useState(0);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -63,6 +66,26 @@ export default function Leaderboard() {
     navigate("/", { state: { macro: entry.macro } });
   }
 
+  async function unlock(entry) {
+    if (!isLoggedIn()) {
+      navigate("/login?mode=signup");
+      return;
+    }
+    setError("");
+    setUnlocking(entry.id);
+    try {
+      const d = await api.leaderboardUnlock(entry.id);
+      if (d.points_balance != null) {
+        updateAuthUser({ ...getAuthUser(), points_balance: d.points_balance });
+      }
+      await load(); // reveal the now-unlocked macro
+    } catch (e) {
+      setError(String(e.message || e));
+    } finally {
+      setUnlocking(0);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -105,8 +128,9 @@ export default function Leaderboard() {
               <div className="w-8 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
+                  {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
                   <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
-                  {e.is_mine && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">나</span>}
+                  {(e.is_owner || e.is_mine) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">내 것</span>}
                   {e.macro?.leverage > 1 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 font-bold" title="고위험 레버리지 전략">
                       ⚠️ {e.macro.leverage}배
@@ -114,7 +138,11 @@ export default function Leaderboard() {
                   )}
                   <span className="text-xs text-slate-500">· 오늘 {e.created_kst} 등록</span>
                 </div>
-                <div className="text-sm text-slate-700 truncate">{e.human_summary}</div>
+                {e.locked ? (
+                  <div className="text-sm text-slate-400 truncate">🔒 잠김 — 언락하면 전략·매크로가 공개돼요</div>
+                ) : (
+                  <div className="text-sm text-slate-700 truncate">{e.human_summary}</div>
+                )}
               </div>
 
               <div className={"w-24 text-right text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
@@ -134,20 +162,33 @@ export default function Leaderboard() {
                 >
                   👎 {e.dislikes}
                 </button>
-                <button
-                  onClick={() => copyToBuilder(e)}
-                  className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  title="이 매크로를 빌더로 복사"
-                >
-                  📋 복사
-                </button>
-                <button
-                  onClick={() => setModal({ edit: e })}
-                  className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  title="비밀번호 확인 후 수정"
-                >
-                  ✏ 수정
-                </button>
+                {e.locked ? (
+                  <button
+                    onClick={() => unlock(e)}
+                    disabled={unlocking === e.id}
+                    className="px-3 py-1 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white"
+                    title="포인트를 써서 매크로 공개+복사 (창작자에게 70% 적립)"
+                  >
+                    {unlocking === e.id ? "여는 중…" : `🔓 ${e.unlock_price}P`}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => copyToBuilder(e)}
+                    className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    title="이 매크로를 빌더로 복사"
+                  >
+                    📋 복사
+                  </button>
+                )}
+                {e.is_mine && !e.for_sale && (
+                  <button
+                    onClick={() => setModal({ edit: e })}
+                    className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    title="비밀번호 확인 후 수정"
+                  >
+                    ✏ 수정
+                  </button>
+                )}
               </div>
             </div>
           );

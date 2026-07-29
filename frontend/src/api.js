@@ -1,12 +1,14 @@
 // Thin API client. Relative URLs work in dev (Vite proxy) and in prod
 // (FastAPI serves the built SPA and the /api routes from one origin).
+import { getToken } from "./lib/auth.js";
+
 const BASE = "";
 
-async function req(path, opts) {
-  const res = await fetch(BASE + path, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
+async function req(path, opts = {}) {
+  const token = getToken();
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { ...opts, headers });
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -19,6 +21,13 @@ async function req(path, opts) {
 }
 
 export const api = {
+  // account auth
+  signup: (email, username, password) =>
+    req("/api/auth/signup", { method: "POST", body: JSON.stringify({ email, username, password }) }),
+  login: (email, password) =>
+    req("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  me: () => req("/api/auth/me"),
+
   createMacro: (macro) => req("/api/macros", { method: "POST", body: JSON.stringify(macro) }),
   getMacro: (slug) => req(`/api/macros/${slug}`),
   backtest: (macro, periodOverride) =>
@@ -95,6 +104,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ user_id: userId, value }),
     }),
+  // 포인트를 소진해 매크로 공개+복사 (창작자에게 70% 분배). 로그인 필요.
+  leaderboardUnlock: (entryId) =>
+    req(`/api/leaderboard/${entryId}/unlock`, { method: "POST" }),
 
   // leaderboard chat (daily KST)
   chatList: () => req("/api/chat"),
