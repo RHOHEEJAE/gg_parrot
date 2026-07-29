@@ -54,6 +54,7 @@ _USER_PROMPT = (
     "- headline: 핵심 원인을 한 문장으로 (간결하게)\n"
     "- points: 원인이 된 요인 2~3개, 각각 한 줄로. 반드시 위 숫자를 근거로.\n"
     "- mood: 결과 분위기 (아래 값 중 하나)\n"
+    "전체가 headline 1줄 + points 최대 4줄 = 5줄을 넘지 않게, 아주 간결하게.\n"
     "지표:\n"
 )
 
@@ -147,7 +148,8 @@ def generate(
         raise AiError("AI 응답 형식이 올바르지 않아요.")
 
     headline = str(obj.get("headline", "")).strip()
-    points = [str(p) for p in obj.get("points", []) if str(p).strip()][:5]
+    # Hard cap: headline + up to 4 points = 5 lines max.
+    points = [str(p) for p in obj.get("points", []) if str(p).strip()][:4]
     if not headline or not points:
         raise AiError("AI 응답이 비어 있어요.")
 

@@ -3,6 +3,7 @@ import Builder from "./Builder.jsx";
 import { api } from "../api.js";
 import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
 import { getNickname, getUserId, setNickname } from "../lib/user.js";
+import { useAuth } from "../lib/auth.js";
 
 // Popup builder. Two modes:
 //  * register (default): pick a macro + 아이디/비밀번호 -> starts a paper session
@@ -18,6 +19,10 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
     if (initialMacro) return macroToForm(initialMacro);
     return defaultForm();
   });
+  const { user } = useAuth();
+  // Registering while logged in -> the entry is owned by the account (earns the
+  // creator share). No display id / edit password needed then.
+  const asAccount = !isEdit && !!user;
   const [username, setUser] = useState(isEdit ? editEntry.username || "" : getNickname());
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("live");
@@ -31,14 +36,21 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
 
   async function save() {
     setError("");
-    if (!isEdit && !username.trim()) return setError("아이디를 입력하세요.");
-    if (!password) return setError("비밀번호를 입력하세요.");
+    if (!asAccount) {
+      if (!isEdit && !username.trim()) return setError("아이디를 입력하세요.");
+      if (!password) return setError("비밀번호를 입력하세요.");
+    }
     if (valErr) return setError(valErr);
     setBusy(true);
     try {
       const macro = buildMacro(form);
       if (isEdit) {
         const d = await api.leaderboardEdit(editEntry.id, macro, password, mode);
+        onDone?.(d.entry);
+      } else if (asAccount) {
+        // Token is attached automatically -> backend uses the account as owner;
+        // the username/password args are ignored server-side.
+        const d = await api.leaderboardRegister(macro, user.username, "", getUserId(), mode);
         onDone?.(d.entry);
       } else {
         setNickname(username);
@@ -63,39 +75,61 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
         </div>
 
         <div className="px-6 py-5 space-y-5">
-          <div className="grid grid-cols-3 gap-4">
-            <label className="block">
-              <span className="text-sm text-slate-700 mb-1 block">아이디</span>
-              <input
-                className={inputCls + (isEdit ? " opacity-60" : "")}
-                value={username}
-                maxLength={24}
-                disabled={isEdit}
-                placeholder="표시용 아이디"
-                onChange={(e) => setUser(e.target.value)}
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm text-slate-700 mb-1 block">비밀번호</span>
-              <input
-                className={inputCls}
-                type="password"
-                value={password}
-                placeholder={isEdit ? "수정하려면 비밀번호" : "수정용 비밀번호"}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm text-slate-700 mb-1 block">페이퍼 모드</span>
-              <select className={inputCls} value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="live">실시간(live)</option>
-                <option value="replay">데모 리플레이</option>
-              </select>
-            </label>
-          </div>
-          <p className="text-xs text-amber-700">
-            ⚠ 이 비밀번호는 엔트리 수정용 임시 비밀번호입니다. <b>다른 서비스와 다른 비밀번호</b>를 사용하세요. (평문 저장 안 함)
-          </p>
+          {asAccount ? (
+            <div className="grid grid-cols-2 gap-4 items-end">
+              <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-800">
+                👤 <b>@{user.username}</b> 계정으로 등록돼요. 다른 사람이 언락하면 <b>포인트 70%</b>가 적립돼요.
+              </div>
+              <label className="block">
+                <span className="text-sm text-slate-700 mb-1 block">페이퍼 모드</span>
+                <select className={inputCls} value={mode} onChange={(e) => setMode(e.target.value)}>
+                  <option value="live">실시간(live)</option>
+                  <option value="replay">데모 리플레이</option>
+                </select>
+              </label>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                <label className="block">
+                  <span className="text-sm text-slate-700 mb-1 block">아이디</span>
+                  <input
+                    className={inputCls + (isEdit ? " opacity-60" : "")}
+                    value={username}
+                    maxLength={24}
+                    disabled={isEdit}
+                    placeholder="표시용 아이디"
+                    onChange={(e) => setUser(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm text-slate-700 mb-1 block">비밀번호</span>
+                  <input
+                    className={inputCls}
+                    type="password"
+                    value={password}
+                    placeholder={isEdit ? "수정하려면 비밀번호" : "수정용 비밀번호"}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm text-slate-700 mb-1 block">페이퍼 모드</span>
+                  <select className={inputCls} value={mode} onChange={(e) => setMode(e.target.value)}>
+                    <option value="live">실시간(live)</option>
+                    <option value="replay">데모 리플레이</option>
+                  </select>
+                </label>
+              </div>
+              {!isEdit && (
+                <p className="text-xs text-slate-500">
+                  💡 <b>로그인</b>하면 계정으로 등록되고, 남이 내 매크로를 언락할 때 포인트를 벌 수 있어요.
+                </p>
+              )}
+              <p className="text-xs text-amber-700">
+                ⚠ 이 비밀번호는 엔트리 수정용 임시 비밀번호입니다. <b>다른 서비스와 다른 비밀번호</b>를 사용하세요. (평문 저장 안 함)
+              </p>
+            </>
+          )}
 
           <Builder form={form} setForm={setForm} />
 
