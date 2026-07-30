@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,6 +33,7 @@ from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
 from . import kimchi as kimchi_mod
 from . import news as news_mod
+from . import board as board_mod
 from . import leaderboard as leaderboard_mod
 from . import optimize as optimize_mod
 from . import paper as paper_mod
@@ -250,8 +251,10 @@ def auth_me(user: User = Depends(auth_mod.current_user)) -> dict:
 
 @app.get("/api/me/dashboard")
 def me_dashboard(user: User = Depends(auth_mod.current_user)) -> dict:
-    """My-page rollup: profile+tier, created/purchased macros, sales, ledger."""
-    return account_mod.dashboard(user)
+    """My-page rollup: profile+tier, created/purchased macros, sales, ledger, 내 글."""
+    d = account_mod.dashboard(user)
+    d["my_posts"] = board_mod.my_posts(user.id)
+    return d
 
 
 @app.post("/api/macros")
@@ -725,6 +728,88 @@ def chat_post(req: ChatPostRequest, request: Request) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"message": msg}
+
+
+# --- 껄무새 게시판 -------------------------------------------------------
+@app.post("/api/board/posts")
+async def board_create(
+    title: str = Form(...),
+    body: str = Form(""),
+    image: Optional[UploadFile] = File(default=None),
+    user: User = Depends(auth_mod.current_user),
+) -> dict:
+    """글 작성 — 로그인 계정만. 이미지(jpg/png, 2MB 이하) 1장 선택."""
+    image_bytes: Optional[bytes] = None
+    image_mime = ""
+    if image is not None and (image.filename or ""):
+        data = await image.read()
+        try:
+            image_bytes, image_mime = board_mod.validate_image(data, image.content_type)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        return board_mod.create_post(user, title, body, image_bytes, image_mime)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/board/posts")
+def board_list(page: int = 1, size: int = board_mod.PAGE_SIZE_DEFAULT) -> dict:
+    return board_mod.list_posts(page, size)
+
+
+@app.get("/api/board/posts/{post_id}")
+def board_detail(post_id: int) -> dict:
+    view = board_mod.get_post(post_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail="글을 찾을 수 없어요.")
+    return view
+
+
+@app.delete("/api/board/posts/{post_id}")
+def board_delete(post_id: int, user: User = Depends(auth_mod.current_user)) -> dict:
+    if not board_mod.delete_post(post_id, user.id):
+        raise HTTPException(status_code=403, detail="본인이 쓴 글만 삭제할 수 있어요.")
+    return {"ok": True}
+
+
+@app.get("/api/board/posts/{post_id}/image")
+def board_image(post_id: int) -> Response:
+    got = board_mod.get_image(post_id)
+    if got is None:
+        raise HTTPException(status_code=404, detail="이미지가 없어요.")
+    data, mime = got
+    return Response(content=data, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+
+
+class CommentIn(BaseModel):
+    username: str
+    password: str
+    text: str
+
+
+@app.post("/api/board/posts/{post_id}/comments")
+def board_comment_add(post_id: int, req: CommentIn, request: Request) -> dict:
+    ip = request.client.host if request.client else "unknown"
+    try:
+        return {"comment": board_mod.add_comment(post_id, req.username, req.password, req.text, ip)}
+    except board_mod.RateLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+class CommentDeleteIn(BaseModel):
+    password: str
+
+
+@app.delete("/api/board/comments/{comment_id}")
+def board_comment_delete(comment_id: int, req: CommentDeleteIn) -> dict:
+    if not board_mod.delete_comment(comment_id, req.password):
+        raise HTTPException(status_code=403, detail="비밀번호가 맞지 않아요.")
+    return {"ok": True}
 
 
 @app.get("/api/card/{slug}.png")

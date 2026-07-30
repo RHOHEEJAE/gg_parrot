@@ -6,6 +6,8 @@ import Auth from "./pages/Auth.jsx";
 import MyPage from "./pages/MyPage.jsx";
 import Guide from "./pages/Guide.jsx";
 import News from "./pages/News.jsx";
+import Board from "./pages/Board.jsx";
+import BoardPost from "./pages/BoardPost.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import { api } from "./api.js";
@@ -39,6 +41,9 @@ function Nav() {
             </NavLink>
             <NavLink to="/news" className={cls}>
               코인동향
+            </NavLink>
+            <NavLink to="/board" className={cls}>
+              게시판
             </NavLink>
             <NavLink to="/guide" className={cls}>
               가이드
@@ -100,6 +105,36 @@ function AuthNav() {
   );
 }
 
+// 로그인 게이트 — 빌더 등 로그인 후 이용 화면을 감싼다.
+function RequireAuth({ children }) {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  if (token) return children;
+  return (
+    <div className="max-w-md mx-auto mt-10 rounded-2xl bg-surface border border-slate-200 p-8 text-center">
+      <div className="text-4xl mb-3">🔒</div>
+      <h2 className="text-lg font-bold text-slate-900">로그인 후 이용할 수 있는 서비스입니다</h2>
+      <p className="mt-2 text-sm text-slate-500">
+        매크로 빌더는 로그인한 회원만 사용할 수 있어요. 로그인하거나 회원가입 후 이용해 주세요.
+      </p>
+      <div className="mt-5 flex items-center justify-center gap-2">
+        <button
+          onClick={() => navigate("/login")}
+          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-sm font-bold text-white"
+        >
+          로그인
+        </button>
+        <button
+          onClick={() => navigate("/login?mode=signup")}
+          className="rounded-lg bg-slate-200 hover:bg-slate-300 px-5 py-2 text-sm font-semibold text-slate-700"
+        >
+          회원가입
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <div className="min-h-screen pb-12">
@@ -110,11 +145,13 @@ export default function App() {
       <main className="max-w-6xl mx-auto px-4 py-8">
         <Routes>
           <Route path="/" element={<Leaderboard />} />
-          <Route path="/builder" element={<Studio />} />
-          <Route path="/s/:slug" element={<Studio />} />
+          <Route path="/builder" element={<RequireAuth><Studio /></RequireAuth>} />
+          <Route path="/s/:slug" element={<RequireAuth><Studio /></RequireAuth>} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/guide" element={<Guide />} />
           <Route path="/news" element={<News />} />
+          <Route path="/board" element={<Board />} />
+          <Route path="/board/:id" element={<BoardPost />} />
           <Route path="/login" element={<Auth />} />
           <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/reset" element={<ResetPassword />} />

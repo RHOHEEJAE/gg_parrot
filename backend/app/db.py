@@ -215,6 +215,39 @@ class WhaleObservation(SQLModel, table=True):
     tracked: int = 0
 
 
+class BoardPost(SQLModel, table=True):
+    """껄무새 게시판 글. 로그인 계정만 작성. 이미지(jpg/png) 1장을 DB에 함께 저장.
+
+    이미지를 DB 바이트로 두는 이유: Render 무료 디스크는 재배포마다 비워지므로
+    파일시스템 저장은 유실된다. 별도 스토리지 설정 없이 durable(Postgres)에 담는다.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    author_user_id: int = Field(index=True)  # 작성자 계정 id
+    author_name: str = ""  # 작성 시점의 표시 아이디(스냅샷)
+    title: str
+    body: str = ""
+    image_mime: str = ""  # "" | image/jpeg | image/png
+    image_data: Optional[bytes] = Field(default=None)  # 원본 바이트(없으면 None)
+    created_at: str  # UTC ISO
+    created_ms: int = Field(index=True)
+
+
+class BoardComment(SQLModel, table=True):
+    """게시글 댓글. 리더보드 채팅처럼 계정 없이 '일회성 아이디+비밀번호'로 단다.
+
+    비밀번호 해시는 본인 삭제 확인에만 쓰고, 절대 응답(view)에 담지 않는다.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    post_id: int = Field(index=True)
+    username: str = ""
+    password_hash: str = ""  # PBKDF2; 본인 삭제 확인용, 응답에 미포함
+    text: str = ""
+    created_at: str
+    created_ms: int = Field(index=True)
+
+
 def _migrate() -> None:
     """Add columns introduced after a table was first created (SQLite create_all
     does not ALTER existing tables). Idempotent and safe to run every startup."""

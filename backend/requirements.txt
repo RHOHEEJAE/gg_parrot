@@ -18,5 +18,7 @@ python-dotenv>=1.0.1
 # psycopg is only imported when DATABASE_URL points at Postgres; local dev/tests
 # run on SQLite without it.
 PyJWT>=2.9.0
+# 게시판 이미지 업로드(multipart/form-data) 파싱 — FastAPI Form/File 의존.
+python-multipart>=0.0.9
 psycopg[binary]>=3.2.0
 pytest>=8.3.0

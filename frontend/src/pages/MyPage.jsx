@@ -51,7 +51,7 @@ export default function MyPage() {
   if (error) return <div className="text-red-600">오류: {error}</div>;
   if (!data) return <div className="text-slate-500">불러오는 중…</div>;
 
-  const { user, tier, totals, created, purchased, sales, ledger } = data;
+  const { user, tier, totals, created, purchased, sales, ledger, my_posts = [] } = data;
 
   return (
     <div className="space-y-6">
@@ -109,6 +109,33 @@ export default function MyPage() {
                   판매 <b>{m.sales}</b> · 수익 <b className="text-amber-700">{P(m.earned)}</b>
                   <span className="text-xs text-slate-400"> · {m.created_kst}</span>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* my board posts */}
+      <Section title="💬 내가 쓴 게시글" count={my_posts.length}>
+        {my_posts.length === 0 ? (
+          <Empty>아직 작성한 게시글이 없어요. 게시판에 첫 글을 남겨보세요.</Empty>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {my_posts.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => navigate(`/board/${p.id}`)}
+                className="flex items-center justify-between gap-3 py-2.5 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-800 truncate">
+                    {p.has_image && <span className="mr-1">📷</span>}
+                    {p.title}
+                    {p.comment_count > 0 && <span className="ml-1.5 text-xs font-bold text-indigo-600">[{p.comment_count}]</span>}
+                  </div>
+                  {p.snippet && <div className="text-xs text-slate-500 truncate">{p.snippet}</div>}
+                </div>
+                <div className="text-[11px] text-slate-400 shrink-0">{p.created_kst}</div>
               </div>
             ))}
           </div>

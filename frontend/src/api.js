@@ -20,6 +20,24 @@ async function req(path, opts = {}) {
   return res.json();
 }
 
+// multipart/form-data 요청 (파일 업로드). Content-Type은 브라우저가 boundary와
+// 함께 자동 설정하도록 두고, Authorization 헤더만 붙인다.
+async function reqForm(path, formData) {
+  const token = getToken();
+  const headers = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { method: "POST", headers, body: formData });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    } catch (_) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export const api = {
   // account auth
   signup: (email, username, password) =>
@@ -81,6 +99,31 @@ export const api = {
   newsMarket: () => req("/api/news/market"),
   // '경주마 동향' — 코인별 최신 뉴스 헤드라인
   newsCoin: (symbol) => req(`/api/news/coin/${encodeURIComponent(symbol)}`),
+
+  // 껄무새 게시판
+  boardList: (page = 1, size = 10) => req(`/api/board/posts?page=${page}&size=${size}`),
+  boardGet: (id) => req(`/api/board/posts/${id}`),
+  // 글 작성(로그인 필요) — title/body + 선택 이미지(File). multipart 전송.
+  boardCreate: ({ title, body, image }) => {
+    const fd = new FormData();
+    fd.append("title", title);
+    fd.append("body", body || "");
+    if (image) fd.append("image", image);
+    return reqForm("/api/board/posts", fd);
+  },
+  boardDelete: (id) => req(`/api/board/posts/${id}`, { method: "DELETE" }),
+  boardImageUrl: (id) => `/api/board/posts/${id}/image`,
+  // 댓글 — 계정 없이 일회성 이름+비밀번호
+  boardAddComment: (postId, { username, password, text }) =>
+    req(`/api/board/posts/${postId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ username, password, text }),
+    }),
+  boardDeleteComment: (commentId, password) =>
+    req(`/api/board/comments/${commentId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ password }),
+    }),
 
   // 한강 수온 (server-cached proxy of the public Hangang temperature API)
   hangangTemp: () => req("/api/hangang-temp"),
