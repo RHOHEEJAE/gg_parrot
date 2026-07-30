@@ -70,6 +70,14 @@ export default function Studio() {
 
   const valErr = validate(form);
 
+  // 상단 미리보기 차트용 종목 목록. 포트폴리오(쉼표 입력)면 종목별로 하나씩.
+  const chartSymbols = (form.symbol || "")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((s, i, a) => a.indexOf(s) === i)
+    .slice(0, 5);
+
   // Auto-run: re-run the backtest a beat after the builder settles, so tweaking
   // a value no longer means "scroll down → click 실행 → scroll back up" each time.
   // Only fires once a first result exists (so the empty state isn't skipped) and
@@ -204,9 +212,16 @@ export default function Studio() {
 
         {/* Live chart of whatever symbol is in the builder — gives the panel
             something useful before a backtest has ever been run. */}
-        {form.symbol && (
-          <div className="mb-6">
-            <CandleChart symbol={form.symbol.toUpperCase()} />
+        {chartSymbols.length > 0 && (
+          <div className="mb-6 space-y-4">
+            {chartSymbols.length > 1 && (
+              <div className="text-xs text-slate-500">
+                포트폴리오 · {chartSymbols.length}개 종목 (각 종목 실시간 차트)
+              </div>
+            )}
+            {chartSymbols.map((s) => (
+              <CandleChart key={s} symbol={s} />
+            ))}
           </div>
         )}
 
