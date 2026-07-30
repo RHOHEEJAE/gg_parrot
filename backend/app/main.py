@@ -39,6 +39,7 @@ from . import ai_explain as ai_explain_mod
 from . import auth as auth_mod
 from . import points as points_mod
 from . import account as account_mod
+from . import challenge as challenge_mod
 from fastapi import Depends
 from .db import User
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
@@ -552,6 +553,12 @@ async def leaderboard_register(
         paper_session_id=info["session_id"],
     )
     return {"entry": entry, "disclaimer": "paper (simulated) trading; reference only"}
+
+
+@app.get("/api/challenge/today")
+async def challenge_today() -> dict:
+    """Today's AI challenge (lazily generated once per KST day): symbol + 🤖 name."""
+    return await challenge_mod.get_today()
 
 
 @app.get("/api/leaderboard")

@@ -87,6 +87,9 @@ class LeaderboardEntry(SQLModel, table=True):
     # Marketplace: the registered account that owns this entry and receives the
     # creator share when others unlock it. None for legacy anonymous entries.
     owner_user_id: Optional[int] = Field(default=None, index=True)
+    # Daily AI challenge bots: free/visible (owner None) but flagged so the UI
+    # can mark them 🤖 and users know who to beat.
+    is_ai: bool = Field(default=False)
     symbol: str
     macro_json: str
     human_summary: str
@@ -131,6 +134,15 @@ class MacroUnlock(SQLModel, table=True):
     user_id: int = Field(index=True)  # who unlocked
     entry_id: int = Field(index=True)  # which leaderboard entry
     price: int  # points paid
+    created_at: str
+
+
+class DailyChallenge(SQLModel, table=True):
+    """One day's AI challenge: the chosen symbol for a KST date (idempotency key)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    date_kst: str = Field(index=True, unique=True)  # YYYY-MM-DD (KST)
+    symbol: str
     created_at: str
 
 
@@ -196,6 +208,7 @@ def _migrate() -> None:
             "username": "ALTER TABLE leaderboardentry ADD COLUMN username TEXT DEFAULT ''",
             "password_hash": "ALTER TABLE leaderboardentry ADD COLUMN password_hash TEXT DEFAULT ''",
             "owner_user_id": "ALTER TABLE leaderboardentry ADD COLUMN owner_user_id INTEGER",
+            "is_ai": "ALTER TABLE leaderboardentry ADD COLUMN is_ai INTEGER DEFAULT 0",
         },
         "papersession": {
             "liquidations": "ALTER TABLE papersession ADD COLUMN liquidations INTEGER DEFAULT 0",

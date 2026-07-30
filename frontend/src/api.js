@@ -67,6 +67,9 @@ export const api = {
     return req(`/api/funding-rate?${q.toString()}`);
   },
 
+  // 오늘의 AI 챌린지 (KST 하루 1회 생성; symbol + 🤖 이름)
+  challengeToday: () => req("/api/challenge/today"),
+
   // '오늘의 경주마' hot coins (server-cached, shared across clients)
   hotCoins: (limit) => req(`/api/hot-coins?limit=${limit || 10}`),
 

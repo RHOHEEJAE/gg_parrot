@@ -21,6 +21,7 @@ export default function Leaderboard() {
   const navigate = useNavigate();
   useAuth(); // re-render on login/logout so gating reflects the current account
   const [items, setItems] = useState([]);
+  const [challenge, setChallenge] = useState(null); // 오늘의 AI 챌린지
   const [unlocking, setUnlocking] = useState(0); // entry id being unlocked
   const [remain, setRemain] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -48,6 +49,10 @@ export default function Leaderboard() {
     const poll = setInterval(() => loadRef.current(), 5000);
     return () => clearInterval(poll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Ensure + fetch today's AI challenge once (first call of the day generates it).
+  useEffect(() => {
+    api.challengeToday().then(setChallenge).catch(() => {});
   }, []);
   useEffect(() => {
     const t = setInterval(() => setRemain((r) => (r > 0 ? r - 1 : 0)), 1000);
@@ -108,6 +113,21 @@ export default function Leaderboard() {
         </button>
       </div>
 
+      {challenge?.active && challenge.symbol && (
+        <div className="mb-4 rounded-2xl border-2 border-indigo-300 bg-indigo-50 px-5 py-4 flex items-center justify-between flex-wrap gap-2">
+          <div className="text-sm text-indigo-900">
+            🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요.{" "}
+            <b>AI를 이겨라!</b> 내 매크로를 등록해 순위로 겨뤄보세요.
+          </div>
+          <button
+            onClick={() => setModal({})}
+            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white"
+          >
+            도전하기
+          </button>
+        </div>
+      )}
+
       <p className="text-sm text-slate-500 mb-4">
         실시간 <b>모의(페이퍼)</b> 수익률과 좋아요로 겨루는 오늘의 보드입니다. 좋아요·수익률은 참고용이며 매수 추천/신호가 아닙니다.
       </p>
@@ -129,7 +149,8 @@ export default function Leaderboard() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
-                  <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
+                  <span className="font-semibold text-slate-900 truncate">{e.is_ai ? "GGparrot AI" : (e.username || e.nickname)}</span>
+                  {e.is_ai && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold">🤖 AI</span>}
                   {(e.is_owner || e.is_mine) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">내 것</span>}
                   {e.macro?.leverage > 1 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 font-bold" title="고위험 레버리지 전략">

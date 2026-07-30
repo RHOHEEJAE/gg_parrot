@@ -75,6 +75,7 @@ def create_entry(
     human_summary: str,
     paper_session_id: Optional[int],
     owner_user_id: Optional[int] = None,
+    is_ai: bool = False,
 ) -> dict:
     now = _now_utc()
     created_ms = int(now.timestamp() * 1000)
@@ -85,6 +86,7 @@ def create_entry(
         username=name,
         password_hash=password_hash,
         owner_user_id=owner_user_id,
+        is_ai=is_ai,
         symbol=symbol,
         macro_json=macro_json,
         human_summary=human_summary,
@@ -216,6 +218,7 @@ def _entry_view(
         "created_at": row.created_at,
         "created_kst": _kst_hhmm(row.created_ms),
         "is_mine": row.user_id == viewer_id,
+        "is_ai": bool(row.is_ai),  # 🤖 daily-challenge bot
         # marketplace fields
         "for_sale": has_owner,  # false for legacy anonymous entries
         "locked": not unlocked,
