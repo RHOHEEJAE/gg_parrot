@@ -39,14 +39,14 @@ function CommentForm({ postId, onAdded }) {
           onChange={(e) => setUsername(e.target.value)}
           placeholder="이름"
           maxLength={24}
-          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm"
+          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
         />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호(삭제용)"
-          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm"
+          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
         />
       </div>
       <textarea
@@ -55,7 +55,7 @@ function CommentForm({ postId, onAdded }) {
         placeholder="댓글을 입력하세요"
         rows={2}
         maxLength={500}
-        className="w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm"
+        className="w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
       />
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center justify-between">
@@ -110,7 +110,7 @@ function Comment({ c, onDeleted }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="작성 시 비밀번호"
-            className="rounded-lg bg-white border border-slate-300 px-2 py-1 text-xs"
+            className="rounded-lg bg-white border border-slate-300 px-2 py-1 text-xs text-slate-900 placeholder-slate-400"
           />
           <button onClick={remove} disabled={busy} className="rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 px-3 py-1 text-xs font-semibold text-white">
             삭제 확인
