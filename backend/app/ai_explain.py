@@ -1,10 +1,10 @@
-"""AI 원인 분석(껄무새 해설의 AI 층) — OpenAI Chat Completions.
+"""AI 원인 분석(껄무새 해설의 AI 층) — Anthropic Claude (Messages API).
 
-SERVER-SIDE ONLY. The key is read from ``OPENAI_API_KEY`` in the environment
-(local .env for dev, Render env for deploy) — never hardcoded, never logged,
-never returned to the client. There is NO user-supplied key: if the server key
-is set the feature is on for everyone; if not, callers fall back to the
-deterministic rule-based explanation.
+SERVER-SIDE ONLY. Uses the official ``anthropic`` SDK, which reads the key from
+``ANTHROPIC_API_KEY`` in the environment (local .env for dev, Render env for
+deploy) — never hardcoded, never logged, never returned to the client. There is
+NO user-supplied key: if the server key is set the feature is on for everyone; if
+not, callers fall back to the deterministic rule-based explanation.
 
 The model is given ONLY the already-computed backtest metrics and asked to
 explain — clearly and within 5 lines — WHY the result turned out this way. It
@@ -18,16 +18,18 @@ import json
 import os
 from typing import Optional
 
-import httpx
+import anthropic
 
 from .engine.backtest import BacktestResult
 from .engine.explain import MOODS, Explanation, explain_result
 from .engine.schema import Macro
 from .engine.summary import human_summary
 
-_ENDPOINT = "https://api.openai.com/v1/chat/completions"
-_DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-_TIMEOUT = float(os.environ.get("OPENAI_TIMEOUT", "15"))
+# Default per the claude-api guidance; override with ANTHROPIC_MODEL. For this
+# cheap, high-volume task claude-haiku-4-5 is far more cost-effective — set the
+# env var to switch without a code change.
+_DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+_MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "2048"))
 
 _SYSTEM = (
     "너는 코인 백테스트 결과의 '원인'을 초보에게 짧고 명확하게 설명하는 도우미야. "
@@ -35,7 +37,7 @@ _SYSTEM = (
     "(3) 과거 결과가 '왜' 이렇게 나왔는지 원인만 분석하고, 미래 예측이나 "
     "'사라/팔아라/추천' 같은 투자 조언은 절대 하지 마. "
     "(4) 쉽고 간결하게. 전체가 headline 1줄 + points 최대 4줄 = 5줄을 넘지 마. "
-    "반드시 JSON만 출력: "
+    "출력은 코드펜스 없이 JSON 객체 하나만: "
     '{"mood": "<' + "|".join(MOODS) + '>", "headline": "<핵심 원인 한 문장>", '
     '"points": ["<숫자 근거 원인 1>", "..."]}'
 )
@@ -55,8 +57,8 @@ class AiError(Exception):
 
 
 def ai_available() -> bool:
-    """True when the server OpenAI key is configured (feature is on)."""
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    """True when the server Anthropic key is configured (feature is on)."""
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def _facts(macro: Macro, r: BacktestResult) -> str:
@@ -79,58 +81,58 @@ def _facts(macro: Macro, r: BacktestResult) -> str:
     )
 
 
-def _extract_text(data: dict) -> Optional[str]:
+def _extract_text(resp) -> Optional[str]:
+    """First text block of a Claude response (thinking blocks may precede it)."""
     try:
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
+        for block in resp.content:
+            if getattr(block, "type", None) == "text":
+                return block.text
+    except (AttributeError, TypeError):
         return None
+    return None
+
+
+def _strip_fences(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        # drop a leading language hint line (e.g. "json\n{...}")
+        if "\n" in t:
+            first, rest = t.split("\n", 1)
+            if first.strip().lower() in ("json", ""):
+                t = rest
+    return t.strip()
 
 
 def generate(macro: Macro, result: BacktestResult, *, model: Optional[str] = None) -> Explanation:
-    """Call OpenAI and return an AI Explanation. Raises :class:`AiError` on failure."""
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        raise AiError("서버에 OpenAI 키가 설정되지 않았어요.")
-    payload = {
-        "model": model or _DEFAULT_MODEL,
-        "messages": [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": _USER_PROMPT + _facts(macro, result)},
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.6,
-    }
+    """Call Claude and return an AI Explanation. Raises :class:`AiError` on failure."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise AiError("서버에 Anthropic 키가 설정되지 않았어요.")
+    client = anthropic.Anthropic()
     try:
-        with httpx.Client(timeout=_TIMEOUT) as client:
-            resp = client.post(
-                _ENDPOINT,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json=payload,
-            )
-    except httpx.RequestError:
+        resp = client.messages.create(
+            model=model or _DEFAULT_MODEL,
+            max_tokens=_MAX_TOKENS,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": _USER_PROMPT + _facts(macro, result)}],
+        )
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
+        raise AiError("Anthropic 키가 유효하지 않거나 권한이 없어요.")
+    except anthropic.RateLimitError:
+        raise AiError("요청이 몰렸어요(레이트 리밋). 잠시 후 다시 시도해 주세요.")
+    except anthropic.APIStatusError as exc:
+        detail = str(getattr(exc, "message", "") or exc).lower()
+        if "credit" in detail or "billing" in detail:
+            raise AiError("Anthropic 크레딧이 부족해요. 콘솔에서 결제/충전을 확인해 주세요.")
+        raise AiError("AI 호출에 실패했어요.")
+    except anthropic.APIConnectionError:
         raise AiError("네트워크 오류로 AI 호출에 실패했어요. 잠시 후 다시 시도해 주세요.")
 
-    if resp.status_code in (401, 403):
-        raise AiError("OpenAI 키가 유효하지 않거나 권한이 없어요.")
-    if resp.status_code == 429:
-        # Distinguish "no credits/billing" (insufficient_quota) from a real rate
-        # limit, since the fix is completely different.
-        code = ""
-        try:
-            code = str((resp.json().get("error") or {}).get("code") or "")
-        except Exception:
-            code = ""
-        if "insufficient_quota" in code:
-            raise AiError("OpenAI 크레딧이 없어요. platform.openai.com 의 Billing에서 결제 수단을 등록하고 크레딧을 충전해 주세요.")
-        raise AiError("요청이 몰렸어요(레이트 리밋). 잠시 후 다시 시도해 주세요.")
-    if resp.status_code >= 400:
-        raise AiError("AI 호출에 실패했어요.")
-
-    text = _extract_text(resp.json())
+    text = _extract_text(resp)
     if not text:
         raise AiError("AI 응답을 해석하지 못했어요.")
     try:
-        obj = json.loads(text)
+        obj = json.loads(_strip_fences(text))
     except (json.JSONDecodeError, TypeError):
         raise AiError("AI 응답 형식이 올바르지 않아요.")
 

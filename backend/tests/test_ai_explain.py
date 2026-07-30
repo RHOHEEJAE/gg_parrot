@@ -1,13 +1,12 @@
-"""AI 원인 분석 층 (OpenAI) — server key gating, fallback, error surfacing, parsing.
+"""AI 원인 분석 층 (Anthropic Claude) — server key gating, fallback, parsing.
 
-No real network calls: the HTTP client is monkeypatched. The key is read from the
-server env OPENAI_API_KEY (no user-supplied key).
+No real network calls: the anthropic client is monkeypatched. The key is read
+from the server env ANTHROPIC_API_KEY (no user-supplied key).
 """
 from __future__ import annotations
 
 import json
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -35,35 +34,39 @@ def _result():
     )
 
 
-class _FakeResp:
-    def __init__(self, payload, status_code=200):
-        self._payload = payload
-        self.status_code = status_code
+class _Block:
+    def __init__(self, text):
+        self.type = "text"
+        self.text = text
 
-    def json(self):
-        return self._payload
+
+class _Resp:
+    def __init__(self, text):
+        # a thinking block may precede the text block on some models
+        self.content = [_Block(text)]
+
+
+class _Messages:
+    def __init__(self, outcome, capture=None):
+        self._outcome = outcome
+        self._capture = capture
+
+    def create(self, **kwargs):
+        if self._capture is not None:
+            self._capture.update(kwargs)
+        if isinstance(self._outcome, Exception):
+            raise self._outcome
+        return _Resp(self._outcome)
 
 
 class _FakeClient:
-    """Stands in for httpx.Client; returns a canned OpenAI chat-completions body."""
+    def __init__(self, outcome, capture=None):
+        self.messages = _Messages(outcome, capture)
 
-    def __init__(self, content, capture=None, status_code=200):
-        self._content = content
-        self._capture = capture
-        self._status = status_code
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def post(self, url, headers=None, json=None):
-        if self._capture is not None:
-            self._capture["url"] = url
-            self._capture["headers"] = headers or {}
-        body = {"choices": [{"message": {"content": self._content}}]}
-        return _FakeResp(body, status_code=self._status)
+def _patch_anthropic(monkeypatch, outcome, capture=None):
+    monkeypatch.setattr(ai_explain.anthropic, "Anthropic",
+                        lambda *a, **k: _FakeClient(outcome, capture))
 
 
 def _good_json():
@@ -75,76 +78,60 @@ def _good_json():
 
 
 def test_no_key_returns_rule_based(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert ai_explain.ai_available() is False
     out = ai_explain.enrich(_macro(), _result())
     assert isinstance(out, Explanation)
     assert out.source == "rule"
 
 
-def test_server_key_generates_ai_and_uses_bearer_header(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
+def test_server_key_generates_ai(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     captured = {}
-    monkeypatch.setattr(ai_explain.httpx, "Client",
-                        lambda *a, **k: _FakeClient(_good_json(), captured))
+    _patch_anthropic(monkeypatch, _good_json(), captured)
     out = ai_explain.generate(_macro(), _result())
     assert out.source == "ai"
     assert out.mood == "win"
     assert len(out.points) == 2
-    assert captured["headers"].get("Authorization") == "Bearer sk-test-123"
-    assert "sk-test-123" not in captured["url"]
+    assert captured["model"]  # a model id was passed
 
 
 def test_enrich_uses_env_key(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(_good_json()))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    _patch_anthropic(monkeypatch, _good_json())
     assert ai_explain.enrich(_macro(), _result()).source == "ai"
 
 
+def test_code_fenced_json_is_parsed(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    fenced = "```json\n" + _good_json() + "\n```"
+    _patch_anthropic(monkeypatch, fenced)
+    assert ai_explain.generate(_macro(), _result()).source == "ai"
+
+
 def test_points_capped_at_four(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     many = json.dumps({"mood": "win", "headline": "원인", "points": [f"p{i}" for i in range(8)]})
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(many))
-    out = ai_explain.generate(_macro(), _result())
-    assert len(out.points) == 4  # 5-line cap: headline + 4 points
+    _patch_anthropic(monkeypatch, many)
+    assert len(ai_explain.generate(_macro(), _result()).points) == 4
 
 
 def test_incomplete_reply_raises_aierror(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     bad = json.dumps({"mood": "win", "headline": "", "points": []})
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _FakeClient(bad))
+    _patch_anthropic(monkeypatch, bad)
     with pytest.raises(AiError):
         ai_explain.generate(_macro(), _result())
 
 
-def test_auth_status_raises_friendly_aierror(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-bad")
-    monkeypatch.setattr(ai_explain.httpx, "Client",
-                        lambda *a, **k: _FakeClient("{}", status_code=401))
-    with pytest.raises(AiError) as ei:
-        ai_explain.generate(_macro(), _result())
-    assert "키" in ei.value.user_message
-
-
-def test_network_error_falls_back_in_enrich(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
-
-    class _Boom:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def post(self, *a, **k):
-            raise httpx.ConnectError("down")
-
-    monkeypatch.setattr(ai_explain.httpx, "Client", lambda *a, **k: _Boom())
+def test_generic_failure_falls_back_in_enrich(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    _patch_anthropic(monkeypatch, RuntimeError("boom"))
     assert ai_explain.enrich(_macro(), _result()).source == "rule"
 
 
 def test_endpoint_reports_ai_unavailable_without_key(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     body = {
         "macro": {
             "symbol": "BTCUSDT", "rule_type": "A", "candle_interval": "1d",

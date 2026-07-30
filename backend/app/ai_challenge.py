@@ -11,17 +11,16 @@ import json
 import os
 from typing import Optional
 
-import httpx
+import anthropic
 
 from .engine.schema import Macro
 
-_ENDPOINT = "https://api.openai.com/v1/chat/completions"
-_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-_TIMEOUT = float(os.environ.get("OPENAI_TIMEOUT", "20"))
+_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+_MAX_TOKENS = int(os.environ.get("ANTHROPIC_CHALLENGE_MAX_TOKENS", "2048"))
 
 _SYSTEM = (
     "너는 코인 백테스트 교육 데모의 전략 생성기야. 주어진 종목으로 초보용 매크로 "
-    "3개를 서로 다른 스타일로 제안해. 반드시 JSON만 출력하고 형식은 "
+    "3개를 서로 다른 스타일로 제안해. 코드펜스 없이 JSON만 출력하고 형식은 "
     '{"macros":[{"rule_type":"A","candle_interval":"1h","params":{...},'
     '"risk":{"stop_loss_pct":3},"position_side":"long"}, ...]}. '
     "rule_type 은 A(익절/손절), E(트레일링), F(RSI), J(이평크로스) 중에서만 고르고 "
@@ -63,25 +62,33 @@ def _valid(macro_dict: dict, symbol: str) -> Optional[dict]:
         return None
 
 
-def _ai_propose(symbol: str, key: str) -> list[dict]:
-    payload = {
-        "model": _MODEL,
-        "messages": [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": f"종목: {symbol}. 이 종목으로 매크로 3개를 JSON으로 제안해줘."},
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.8,
-    }
-    with httpx.Client(timeout=_TIMEOUT) as client:
-        resp = client.post(
-            _ENDPOINT,
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json=payload,
-        )
-    resp.raise_for_status()
-    text = resp.json()["choices"][0]["message"]["content"]
-    obj = json.loads(text)
+def _strip_fences(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        if "\n" in t:
+            first, rest = t.split("\n", 1)
+            if first.strip().lower() in ("json", ""):
+                t = rest
+    return t.strip()
+
+
+def _ai_propose(symbol: str) -> list[dict]:
+    client = anthropic.Anthropic()
+    resp = client.messages.create(
+        model=_MODEL,
+        max_tokens=_MAX_TOKENS,
+        system=_SYSTEM,
+        messages=[{"role": "user", "content": f"종목: {symbol}. 이 종목으로 매크로 3개를 JSON으로 제안해줘."}],
+    )
+    text = None
+    for block in resp.content:
+        if getattr(block, "type", None) == "text":
+            text = block.text
+            break
+    if not text:
+        return []
+    obj = json.loads(_strip_fences(text))
     macros = obj.get("macros", obj if isinstance(obj, list) else [])
     return macros if isinstance(macros, list) else []
 
@@ -89,10 +96,9 @@ def _ai_propose(symbol: str, key: str) -> list[dict]:
 def generate_macros(symbol: str, n: int = 3) -> list[dict]:
     """Return exactly ``n`` valid macro dicts for ``symbol`` (AI + template fill)."""
     proposed: list[dict] = []
-    key = os.environ.get("OPENAI_API_KEY")
-    if key:
+    if os.environ.get("ANTHROPIC_API_KEY"):
         try:
-            proposed = _ai_propose(symbol, key)
+            proposed = _ai_propose(symbol)
         except Exception:
             proposed = []
 
