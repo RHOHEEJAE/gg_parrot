@@ -113,7 +113,16 @@ def generate(macro: Macro, result: BacktestResult, *, model: Optional[str] = Non
     if resp.status_code in (401, 403):
         raise AiError("OpenAI 키가 유효하지 않거나 권한이 없어요.")
     if resp.status_code == 429:
-        raise AiError("요청이 많거나 크레딧이 부족해요. 잠시 후 다시 시도해 주세요.")
+        # Distinguish "no credits/billing" (insufficient_quota) from a real rate
+        # limit, since the fix is completely different.
+        code = ""
+        try:
+            code = str((resp.json().get("error") or {}).get("code") or "")
+        except Exception:
+            code = ""
+        if "insufficient_quota" in code:
+            raise AiError("OpenAI 크레딧이 없어요. platform.openai.com 의 Billing에서 결제 수단을 등록하고 크레딧을 충전해 주세요.")
+        raise AiError("요청이 몰렸어요(레이트 리밋). 잠시 후 다시 시도해 주세요.")
     if resp.status_code >= 400:
         raise AiError("AI 호출에 실패했어요.")
 
