@@ -31,7 +31,7 @@ export default {
         danger: v("--c-danger"),
         "danger-hover": v("--c-danger-hover"),
         slate: scale("slate", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
-        indigo: scale("indigo", [50, 100, 200, 300, 400, 500, 600, 700]),
+        indigo: scale("indigo", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
         red: scale("red", [50, 100, 300, 400, 500, 600, 700, 800]),
         green: scale("green", [50, 300, 600, 700]),
         amber: scale("amber", [50, 100, 200, 300, 500, 600, 700, 800]),

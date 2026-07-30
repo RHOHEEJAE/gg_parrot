@@ -30,6 +30,8 @@
     --c-indigo-500: 99 102 241;
     --c-indigo-600: 79 70 229;
     --c-indigo-700: 67 56 202;
+    --c-indigo-800: 55 48 163;
+    --c-indigo-900: 49 46 129;
 
     --c-red-50: 254 242 242;
     --c-red-100: 254 226 226;
@@ -117,7 +119,10 @@
     --c-indigo-400: 129 140 248;
     --c-indigo-500: 92 96 236; /* hover fill; still readable under white text */
     --c-indigo-600: 79 74 220;
+    /* text steps go light so they read on the now-dark indigo tints (50-200). */
     --c-indigo-700: 178 184 253;
+    --c-indigo-800: 199 210 254;
+    --c-indigo-900: 224 231 255;
 
     --c-red-50: 74 25 27;
     --c-red-100: 97 31 34;
