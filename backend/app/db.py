@@ -13,18 +13,33 @@ from sqlmodel import Field, Session, SQLModel, create_engine
 _DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 
+def _sqlite_engine():
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.db")
+    return create_engine(f"sqlite:///{path}", echo=False)
+
+
 def _build_engine():
-    if _DATABASE_URL:
-        url = _DATABASE_URL
+    url = _DATABASE_URL
+    if url:
         # Normalize to the psycopg (v3) driver SQLAlchemy expects.
         if url.startswith("postgres://"):
             url = "postgresql+psycopg://" + url[len("postgres://"):]
         elif url.startswith("postgresql://"):
             url = "postgresql+psycopg://" + url[len("postgresql://"):]
-        # pool_pre_ping recycles connections Supabase drops when idle.
-        return create_engine(url, echo=False, pool_pre_ping=True)
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.db")
-    return create_engine(f"sqlite:///{path}", echo=False)
+        if url.startswith("postgresql+psycopg://"):
+            # pool_pre_ping recycles connections Supabase drops when idle.
+            return create_engine(url, echo=False, pool_pre_ping=True)
+        # Wrong value (e.g. the https project URL was pasted instead of the
+        # Postgres connection string). Don't crash the whole app — fall back to
+        # SQLite and warn loudly so the misconfig is obvious in the logs.
+        scheme = _DATABASE_URL.split("://", 1)[0]
+        print(
+            f"[db] DATABASE_URL scheme '{scheme}' is not Postgres; falling back to "
+            "SQLite (ephemeral). Set it to the Supabase Session-pooler connection "
+            "string (postgresql://...).",
+            flush=True,
+        )
+    return _sqlite_engine()
 
 
 _engine = _build_engine()
