@@ -95,7 +95,49 @@ function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   );
 }
 
-export default function ResultView({ result, explanation, onAiExplain, aiBusy, aiError, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
+function PerSymbolTable({ rows }) {
+  if (!rows || rows.length === 0) return null;
+  const coin = (s) => (s || "").replace(/USDT$|BUSD$|USDC$/, "");
+  return (
+    <div className="rounded-2xl bg-surface border border-slate-200 p-5">
+      <div className="text-sm font-semibold text-slate-700 mb-3">
+        🧺 종목별 성과 (포트폴리오 · 자금 균등 분할)
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[420px]">
+          <thead>
+            <tr className="text-slate-500 border-b border-slate-200">
+              <th className="text-left py-1.5">종목</th>
+              <th className="text-right">수익률</th>
+              <th className="text-right">MDD</th>
+              <th className="text-right">승률</th>
+              <th className="text-right">매매</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const up = (r.final_return_pct ?? 0) >= 0;
+              return (
+                <tr key={r.symbol} className="border-b border-slate-100 last:border-0">
+                  <td className="py-1.5 font-medium text-slate-800">{coin(r.symbol)}</td>
+                  <td className={"text-right font-bold tabular-nums " + (up ? "text-green-600" : "text-red-600")}>
+                    {up ? "+" : ""}{(r.final_return_pct ?? 0).toFixed(2)}%
+                  </td>
+                  <td className="text-right tabular-nums text-red-600">-{(r.mdd_pct ?? 0).toFixed(1)}%</td>
+                  <td className="text-right tabular-nums text-slate-600">{(r.win_rate_pct ?? 0).toFixed(0)}%</td>
+                  <td className="text-right tabular-nums text-slate-600">{r.total_trades ?? 0}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 text-[11px] text-slate-400">위 큰 수치는 종목별을 합산한 포트폴리오 전체 결과예요.</div>
+    </div>
+  );
+}
+
+export default function ResultView({ result, perSymbol, explanation, onAiExplain, aiBusy, aiError, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
   if (!result) return null;
   const r = result;
   const up = r.final_return_pct >= 0;
@@ -198,6 +240,8 @@ export default function ResultView({ result, explanation, onAiExplain, aiBusy, a
           color={(r.max_consecutive_losses || 0) >= 5 ? "text-red-600" : "text-slate-900"}
         />
       </div>
+
+      <PerSymbolTable rows={perSymbol} />
 
       <ParrotExplain
         explanation={explanation}

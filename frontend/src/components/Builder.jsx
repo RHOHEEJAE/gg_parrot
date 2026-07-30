@@ -100,8 +100,8 @@ export default function Builder({ form, setForm }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-4">
-        <Field label="종목 (symbol)" hint={`금액 단위: ${quoteOf(form.symbol)} (달러 기준) · 원화(≈)는 참고용 근사치`}>
-          <input className={inputCls} value={form.symbol} onChange={set("symbol")} />
+        <Field label="종목 (symbol)" hint="쉼표로 여러 종목 = 포트폴리오 (예: BTCUSDT, ETHUSDT). 자금을 균등 분할해 합산해요">
+          <input className={inputCls} value={form.symbol} onChange={set("symbol")} placeholder="BTCUSDT 또는 BTCUSDT, ETHUSDT" />
         </Field>
         <Field label="규칙 타입 (전략)" term={`strat_${rt}`}>
           <select className={inputCls} value={rt} onChange={(e) => setForm(withTypeDefaults(form, e.target.value))}>

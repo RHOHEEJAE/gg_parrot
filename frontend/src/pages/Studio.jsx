@@ -16,6 +16,7 @@ export default function Studio() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [form, setForm] = useState(defaultForm());
   const [result, setResult] = useState(null);
+  const [perSymbol, setPerSymbol] = useState([]); // 포트폴리오 종목별 분해
   const [explanation, setExplanation] = useState(null); // 껄무새 해설 (rule-based; AI로 교체 가능)
   const [aiBusy, setAiBusy] = useState(false); // AI 원인 분석 요청 중
   const [aiError, setAiError] = useState(""); // AI 실패 사유
@@ -103,6 +104,7 @@ export default function Studio() {
       const macro = buildMacro(form);
       const data = await api.backtest(macro);
       setResult(data.result);
+      setPerSymbol(data.per_symbol || []);
       setExplanation(data.explanation || null);
       setAiError("");
       setSummary(data.human_summary);
@@ -218,6 +220,7 @@ export default function Studio() {
         {result && (
           <ResultView
             result={result}
+            perSymbol={perSymbol}
             explanation={explanation}
             onAiExplain={enrichExplanation}
             aiBusy={aiBusy}

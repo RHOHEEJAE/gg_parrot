@@ -66,9 +66,8 @@ def ai_available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def _facts(macro: Macro, r: BacktestResult) -> str:
-    return json.dumps(
-        {
+def _facts(macro: Macro, r: BacktestResult, per_symbol=None) -> str:
+    data = {
             "요약": human_summary(macro),
             "종목": macro.symbol,
             "레버리지": macro.leverage,
@@ -81,9 +80,22 @@ def _facts(macro: Macro, r: BacktestResult) -> str:
             "손익비": r.profit_factor,
             "최대연속손절": r.max_consecutive_losses,
             "청산횟수": r.liquidation_count,
-        },
-        ensure_ascii=False,
-    )
+    }
+    if per_symbol:
+        # Portfolio: give the per-symbol breakdown so the AI can say which coin
+        # helped/hurt and how correlated the legs were.
+        data["멀티종목_포트폴리오"] = True
+        data["종목별"] = [
+            {
+                "종목": s.get("symbol"),
+                "수익률%": s.get("final_return_pct"),
+                "MDD%": s.get("mdd_pct"),
+                "승률%": s.get("win_rate_pct"),
+                "매매횟수": s.get("total_trades"),
+            }
+            for s in per_symbol
+        ]
+    return json.dumps(data, ensure_ascii=False)
 
 
 def _extract_text(resp) -> Optional[str]:
@@ -109,17 +121,23 @@ def _strip_fences(text: str) -> str:
     return t.strip()
 
 
-def generate(macro: Macro, result: BacktestResult, *, model: Optional[str] = None) -> Explanation:
+def generate(macro: Macro, result: BacktestResult, *, per_symbol=None, model: Optional[str] = None) -> Explanation:
     """Call Claude and return an AI Explanation. Raises :class:`AiError` on failure."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise AiError("서버에 Anthropic 키가 설정되지 않았어요.")
     client = anthropic.Anthropic()
+    system = _SYSTEM
+    if per_symbol:
+        system += (
+            " 이건 여러 종목을 함께 굴린 '포트폴리오' 결과야. 종목별 성과 차이(어느 코인이 "
+            "끌어올리고 어느 코인이 깎아먹었는지)와 분산 효과 관점도 쉽게 짚어줘."
+        )
     try:
         resp = client.messages.create(
             model=model or _DEFAULT_MODEL,
             max_tokens=_MAX_TOKENS,
-            system=_SYSTEM,
-            messages=[{"role": "user", "content": _USER_PROMPT + _facts(macro, result)}],
+            system=system,
+            messages=[{"role": "user", "content": _USER_PROMPT + _facts(macro, result, per_symbol)}],
         )
     except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
         raise AiError("Anthropic 키가 유효하지 않거나 권한이 없어요.")

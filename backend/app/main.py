@@ -51,6 +51,7 @@ from .marketdata import fetch_klines_for_macro
 from .db import MacroRow, get_session, init_db
 from .engine import BacktestResult, Macro, Period, human_summary
 from .engine.backtest import run_backtest
+from .engine import portfolio as portfolio_mod
 from .engine.explain import explain_result
 from .engine.summary import _coin
 from .realtrade import build_bundle
@@ -103,14 +104,37 @@ def _make_slug(macro: Macro) -> str:
     return f"{coin}-{desc}-{side}-{uuid.uuid4().hex[:4]}"
 
 
-def _run_for_macro(macro: Macro) -> tuple[BacktestResult, str, str]:
+def _run_any(macro: Macro) -> tuple[BacktestResult, list, str, str]:
+    """Run a macro; returns (result, per_symbol, source, period_label).
+
+    Single-symbol => per_symbol == []. Portfolio (macro.symbols len>1) => the
+    same rule runs on each symbol with capital split evenly, and the aggregated
+    portfolio result is returned alongside a per-symbol breakdown.
+    """
     start_ms, end_ms = resolve_period(macro.period.preset, macro.period.start, macro.period.end)
-    # Picks spot vs USDT-M futures candles per the macro (short/leverage -> real
-    # futures data). No synthetic fallback: a symbol with no real data raises
-    # NoSpotDataError -> 422 at the endpoint.
+    label = _period_label(macro.period)
+
+    if macro.is_portfolio():
+        syms = macro.all_symbols()
+        base = macro.initial_capital
+        per_cap = (base / len(syms)) if base else None
+        results: list = []
+        source = ""
+        for sym in syms:
+            leg = macro.for_symbol(sym, per_cap)
+            df, source = fetch_klines_for_macro(leg, start_ms, end_ms)
+            results.append((sym, run_backtest(leg, df)))
+        agg, per_symbol = portfolio_mod.aggregate(results, candle_interval=macro.candle_interval)
+        return agg, per_symbol, source, label
+
+    # Single symbol: no synthetic fallback; missing data raises NoSpotDataError.
     df, source = fetch_klines_for_macro(macro, start_ms, end_ms)
-    result = run_backtest(macro, df)
-    return result, source, _period_label(macro.period)
+    return run_backtest(macro, df), [], source, label
+
+
+def _run_for_macro(macro: Macro) -> tuple[BacktestResult, str, str]:
+    result, _per, source, label = _run_any(macro)
+    return result, source, label
 
 
 def _row_to_macro(row: MacroRow) -> Macro:
@@ -300,13 +324,14 @@ def backtest(req: BacktestRequest) -> dict:
     if req.period_override is not None:
         macro = macro.model_copy(update={"period": req.period_override})
     try:
-        result, source, period_label = _run_for_macro(macro)
+        result, per_symbol, source, period_label = _run_any(macro)
     except NoSpotDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {
         "result": result.model_dump(),
+        "per_symbol": per_symbol,  # [] for single-symbol; portfolio breakdown otherwise
         "human_summary": human_summary(macro),
         "data_source": source,
         "period_label": period_label,
@@ -333,7 +358,7 @@ def explain_ai(req: ExplainAiRequest) -> dict:
         macro = macro.model_copy(update={"period": req.period_override})
 
     try:
-        result, _, _ = _run_for_macro(macro)
+        result, per_symbol, _, _ = _run_any(macro)
     except NoSpotDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
@@ -350,7 +375,7 @@ def explain_ai(req: ExplainAiRequest) -> dict:
         return {"explanation": hit, "ai_available": True, "cached": True}
 
     try:
-        enriched = ai_explain_mod.generate(macro, result)
+        enriched = ai_explain_mod.generate(macro, result, per_symbol=per_symbol or None)
     except ai_explain_mod.AiError as exc:
         base = explain_result(macro, result).model_dump()
         return {"explanation": base, "ai_available": True, "ai_error": exc.user_message}

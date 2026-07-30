@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import enum
 import os
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -242,6 +242,9 @@ class Macro(BaseModel):
     macro_id: Optional[str] = None
     share_slug: Optional[str] = None
     symbol: str = "BTCUSDT"
+    # Multi-symbol (portfolio) backtest: run the SAME rule on each symbol with the
+    # capital split evenly, then aggregate. None/[]/single => normal single-symbol.
+    symbols: Optional[list[str]] = None
     rule_type: RuleType
     position_side: PositionSide = PositionSide.LONG
     candle_interval: str = "1d"  # A/B/C fill on this bar; F/G/I/J compute indicators on it
@@ -260,8 +263,28 @@ class Macro(BaseModel):
     fees: Fees = Field(default_factory=Fees)
     created_at: Optional[str] = None
 
+    # Demo cap on how many symbols one portfolio macro may span.
+    MAX_SYMBOLS: ClassVar[int] = 5
+
     @model_validator(mode="after")
     def _validate(self) -> "Macro":
+        # Normalize the portfolio symbol list (upper, dedup, keep order). The
+        # primary `symbol` is always the first entry so single-symbol paths and
+        # slug/summary logic keep working unchanged.
+        if self.symbols:
+            seen: list[str] = []
+            for s in self.symbols:
+                su = str(s).strip().upper()
+                if su and su not in seen:
+                    seen.append(su)
+            if len(seen) > self.MAX_SYMBOLS:
+                raise ValueError(f"portfolio supports at most {self.MAX_SYMBOLS} symbols")
+            if seen:
+                self.symbol = seen[0]
+                self.symbols = seen if len(seen) > 1 else None
+            else:
+                self.symbols = None
+
         if self.candle_interval not in _VALID_INTERVALS:
             raise ValueError(f"candle_interval must be one of {sorted(_VALID_INTERVALS)}")
 
@@ -334,6 +357,22 @@ class Macro(BaseModel):
     def initial_capital(self) -> Optional[float]:
         v = self.params.get("initial_capital")
         return float(v) if v is not None else None
+
+    def all_symbols(self) -> list[str]:
+        """Every symbol this macro runs on (>=1). Portfolio when len > 1."""
+        return self.symbols if self.symbols else [self.symbol]
+
+    def is_portfolio(self) -> bool:
+        return bool(self.symbols) and len(self.symbols) > 1
+
+    def for_symbol(self, symbol: str, initial_capital: Optional[float] = None) -> "Macro":
+        """A single-symbol copy for one leg of a portfolio (optionally re-capitalized)."""
+        data = self.model_dump()
+        data["symbol"] = symbol
+        data["symbols"] = None
+        if initial_capital is not None and data.get("params", {}).get("initial_capital") is not None:
+            data["params"] = {**data["params"], "initial_capital": initial_capital}
+        return Macro(**data)
 
     def resolved_market(self) -> str:
         """'spot' or 'futures' for data selection.

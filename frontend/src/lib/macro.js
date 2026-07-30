@@ -265,8 +265,15 @@ export function buildMacro(form) {
   const rt = form.rule_type;
   const meta = RULE_TYPES[rt];
   const useSL = form.use_stop_loss && form.stop_loss_pct > 0;
+  // 멀티종목(포트폴리오): 쉼표로 여러 종목 입력 -> symbols 배열. 하나면 단일.
+  const syms = (form.symbol || "")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+  const uniq = [...new Set(syms)];
   return {
-    symbol: form.symbol.toUpperCase(),
+    symbol: uniq[0] || "BTCUSDT",
+    symbols: uniq.length > 1 ? uniq.slice(0, 5) : null,
     rule_type: rt,
     position_side: rt === "C" || !meta.allowShort ? "long" : form.position_side,
     candle_interval: form.candle_interval || "1d",
@@ -297,7 +304,7 @@ export function buildMacro(form) {
 // Load a stored macro JSON back into editable form state (clone flow).
 export function macroToForm(macro) {
   const f = defaultForm();
-  f.symbol = macro.symbol;
+  f.symbol = macro.symbols && macro.symbols.length > 1 ? macro.symbols.join(", ") : macro.symbol;
   f.rule_type = macro.rule_type;
   f.position_side = macro.position_side;
   f.candle_interval = macro.candle_interval ?? "1d";
