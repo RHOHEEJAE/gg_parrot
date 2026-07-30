@@ -15,13 +15,9 @@ const MOOD_ACCENT = {
   big_win: "text-green-700",
 };
 
-const aiInputCls =
-  "w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
-  "focus:outline-none focus:ring-2 focus:ring-slate-500";
-
-// 껄무새 AI 원인 분석 카드. 규칙기반 장문 멘트는 쓰지 않고, 키를 넣으면 AI가
-// 결과 원인을 간결하게 분석한다(BYOK). 키는 이 브라우저에만 저장된다.
-function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError, geminiKey, onKeyChange }) {
+// 껄무새 AI 원인 분석 카드. 규칙기반 장문 멘트는 쓰지 않고, '분석하기'를 누르면
+// 서버(OpenAI)가 결과 원인을 5줄 이내로 간결하게 분석한다.
+function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
   const isAi = explanation && explanation.source === "ai";
 
   // AI 분석 결과가 있을 때: 간결한 원인 분석만 렌더.
@@ -58,38 +54,24 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError, geminiKey, o
     );
   }
 
-  // 아직 AI 분석 전: 키 입력 + 분석 버튼(BYOK). 규칙기반 장문은 노출하지 않음.
-  const hasKey = (geminiKey || "").trim().length > 0;
+  // 아직 AI 분석 전: 분석 버튼만. 서버 OpenAI 키로 동작(입력 불필요).
   return (
     <div className="rounded-2xl border border-slate-200 bg-surface p-5">
-      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-        🦜 AI 원인 분석
-        <span className="text-xs font-normal text-slate-400">이 결과가 왜 이렇게 나왔는지 분석해줘요</span>
-      </div>
-      <div className="mt-3 flex items-center gap-2">
-        <input
-          type="password"
-          className={aiInputCls}
-          placeholder="Gemini API 키 입력 (AIza…)"
-          value={geminiKey || ""}
-          onChange={(e) => onKeyChange && onKeyChange(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-        />
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          🦜 AI 원인 분석
+          <span className="text-xs font-normal text-slate-400">이 결과가 왜 이렇게 나왔는지 5줄로 분석해줘요</span>
+        </div>
         <button
           type="button"
           onClick={onAiExplain}
-          disabled={aiBusy || !hasKey}
+          disabled={aiBusy}
           className="shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
         >
           {aiBusy ? "분석 중…" : "분석하기"}
         </button>
       </div>
       {aiError && <div className="mt-2 text-xs text-red-600">{aiError}</div>}
-      <div className="mt-2 text-[11px] text-slate-400">
-        🔒 키는 이 브라우저에만 저장되고, 분석할 때만 서버를 거쳐 Google로 전송돼요. 공용 PC에서는 사용하지 마세요.{" "}
-        <a className="underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">키 발급</a>
-      </div>
     </div>
   );
 }
@@ -107,7 +89,7 @@ function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   );
 }
 
-export default function ResultView({ result, explanation, onAiExplain, aiBusy, aiError, geminiKey, onKeyChange, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
+export default function ResultView({ result, explanation, onAiExplain, aiBusy, aiError, summary, dataSource, periodLabel, symbol, leverage = 1 }) {
   if (!result) return null;
   const r = result;
   const up = r.final_return_pct >= 0;
@@ -216,8 +198,6 @@ export default function ResultView({ result, explanation, onAiExplain, aiBusy, a
         onAiExplain={onAiExplain}
         aiBusy={aiBusy}
         aiError={aiError}
-        geminiKey={geminiKey}
-        onKeyChange={onKeyChange}
       />
 
       <div className="rounded-2xl bg-surface border border-slate-200 p-6">

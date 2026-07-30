@@ -55,7 +55,7 @@ export default function HotCoinsMarquee() {
 
   const pick = (symbol) => {
     // Prefill the builder with the full pair (e.g. XRPUSDT) via query param.
-    navigate(`/?symbol=${encodeURIComponent(symbol)}`);
+    navigate(`/builder?symbol=${encodeURIComponent(symbol)}`);
   };
 
   // Speed scales with count so the flow feels consistent regardless of list size.

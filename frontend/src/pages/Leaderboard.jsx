@@ -63,7 +63,7 @@ export default function Leaderboard() {
 
   function copyToBuilder(entry) {
     // Reuse the clone/prefill path: pass the full macro to the builder via state.
-    navigate("/", { state: { macro: entry.macro } });
+    navigate("/builder", { state: { macro: entry.macro } });
   }
 
   async function unlock(entry) {

@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom"
 import Studio from "./pages/Studio.jsx";
 import Leaderboard from "./pages/Leaderboard.jsx";
 import Auth from "./pages/Auth.jsx";
+import MyPage from "./pages/MyPage.jsx";
 import { api } from "./api.js";
 import { useAuth, clearAuth, updateAuthUser } from "./lib/auth.js";
 import SimBadge from "./components/SimBadge.jsx";
@@ -26,11 +27,11 @@ function Nav() {
             🦜 GGparrot
           </NavLink>
           <nav className="flex gap-1">
-            <NavLink to="/" end={false} className={cls}>
-              빌더
-            </NavLink>
-            <NavLink to="/leaderboard" className={cls}>
+            <NavLink to="/" end className={cls}>
               오늘의 리더보드
+            </NavLink>
+            <NavLink to="/builder" className={cls}>
+              빌더
             </NavLink>
           </nav>
         </div>
@@ -71,13 +72,16 @@ function AuthNav() {
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden sm:inline text-sm text-slate-700 font-medium truncate max-w-[10rem]">
+      <button onClick={() => navigate("/mypage")}
+        className="hidden sm:inline text-sm text-slate-700 font-medium truncate max-w-[10rem] hover:text-indigo-600"
+        title="마이페이지">
         👤 {user.username}
-      </span>
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-800"
-        title="보유 포인트">
+      </button>
+      <button onClick={() => navigate("/mypage")}
+        className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100"
+        title="마이페이지 · 보유 포인트">
         🪙 {(user.points_balance ?? 0).toLocaleString()}P
-      </span>
+      </button>
       <button onClick={() => { clearAuth(); navigate("/"); }}
         className="px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900">
         로그아웃
@@ -95,11 +99,13 @@ export default function App() {
       {/* [차후 도입] <WhaleBanner /> */}
       <main className="max-w-6xl mx-auto px-4 py-8">
         <Routes>
-          <Route path="/" element={<Studio />} />
+          <Route path="/" element={<Leaderboard />} />
+          <Route path="/builder" element={<Studio />} />
           <Route path="/s/:slug" element={<Studio />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/mypage" element={<MyPage />} />
           <Route path="/login" element={<Auth />} />
-          <Route path="/gallery" element={<Navigate to="/leaderboard" replace />} />
+          <Route path="/leaderboard" element={<Navigate to="/" replace />} />
+          <Route path="/gallery" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <footer className="max-w-6xl mx-auto px-4 py-8 text-xs text-slate-500">

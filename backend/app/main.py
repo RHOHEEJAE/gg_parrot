@@ -38,6 +38,7 @@ from . import paper as paper_mod
 from . import ai_explain as ai_explain_mod
 from . import auth as auth_mod
 from . import points as points_mod
+from . import account as account_mod
 from fastapi import Depends
 from .db import User
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
@@ -147,10 +148,6 @@ class LoginRequest(BaseModel):
 class ExplainAiRequest(BaseModel):
     macro: Macro
     period_override: Optional[Period] = None
-    # BYOK: the user's own Gemini key from the UI (used in-memory, never stored).
-    # Falls back to the server env GEMINI_API_KEY when omitted.
-    api_key: Optional[str] = None
-    model: Optional[str] = None
 
 
 class BundleRequest(BaseModel):
@@ -203,6 +200,12 @@ def auth_login(req: LoginRequest) -> dict:
 def auth_me(user: User = Depends(auth_mod.current_user)) -> dict:
     """Current account (from the Bearer token), including the points balance."""
     return {"user": auth_mod.user_view(user)}
+
+
+@app.get("/api/me/dashboard")
+def me_dashboard(user: User = Depends(auth_mod.current_user)) -> dict:
+    """My-page rollup: profile+tier, created/purchased macros, sales, ledger."""
+    return account_mod.dashboard(user)
 
 
 @app.post("/api/macros")
@@ -301,14 +304,12 @@ _AI_EXPLAIN_CACHE_MAX = 500
 
 @app.post("/api/explain/ai")
 def explain_ai(req: ExplainAiRequest) -> dict:
-    """On-demand AI 원인 분석. The key comes from the UI (BYOK) or the server env.
-    Always returns a valid ``explanation``: on any AI failure it falls back to the
-    rule-based one (same schema) and reports ``ai_error`` so the UI can hint why."""
+    """On-demand AI 원인 분석 using the server OpenAI key. Always returns a valid
+    ``explanation``: on any AI failure it falls back to the rule-based one (same
+    schema) and reports ``ai_error`` so the UI can hint why."""
     macro = req.macro
     if req.period_override is not None:
         macro = macro.model_copy(update={"period": req.period_override})
-
-    key = (req.api_key or "").strip() or os.environ.get("GEMINI_API_KEY")
 
     try:
         result, _, _ = _run_for_macro(macro)
@@ -317,18 +318,18 @@ def explain_ai(req: ExplainAiRequest) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    if not key:
+    if not ai_explain_mod.ai_available():
         return {"explanation": explain_result(macro, result).model_dump(), "ai_available": False}
 
-    # Deterministic backtest -> (macro, model) fully determines the AI text, so
-    # cache successful results and skip the LLM on repeats. Never cache failures.
-    cache_key = macro.model_dump_json() + "|" + (req.model or "")
+    # Deterministic backtest -> macro fully determines the AI text, so cache
+    # successful results and skip the LLM on repeats. Never cache failures.
+    cache_key = macro.model_dump_json()
     hit = _ai_explain_cache.get(cache_key)
     if hit is not None:
         return {"explanation": hit, "ai_available": True, "cached": True}
 
     try:
-        enriched = ai_explain_mod.generate(macro, result, api_key=key, model=req.model)
+        enriched = ai_explain_mod.generate(macro, result)
     except ai_explain_mod.AiError as exc:
         base = explain_result(macro, result).model_dump()
         return {"explanation": base, "ai_available": True, "ai_error": exc.user_message}

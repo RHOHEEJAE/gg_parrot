@@ -9,7 +9,6 @@ import OptimizePanel from "../components/OptimizePanel.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import { api } from "../api.js";
 import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
-import { getGeminiKey, setGeminiKey } from "../lib/aikey.js";
 
 export default function Studio() {
   const { slug } = useParams();
@@ -19,8 +18,7 @@ export default function Studio() {
   const [result, setResult] = useState(null);
   const [explanation, setExplanation] = useState(null); // 껄무새 해설 (rule-based; AI로 교체 가능)
   const [aiBusy, setAiBusy] = useState(false); // AI 원인 분석 요청 중
-  const [aiError, setAiError] = useState(""); // AI 실패 사유(키 오류 등)
-  const [geminiKey, setGeminiKeyState] = useState(() => getGeminiKey()); // BYOK (브라우저 저장)
+  const [aiError, setAiError] = useState(""); // AI 실패 사유
   const [summary, setSummary] = useState("");
   const [dataSource, setDataSource] = useState("");
   const [periodLabel, setPeriodLabel] = useState("");
@@ -138,25 +136,16 @@ export default function Studio() {
     }
   }
 
-  function updateGeminiKey(v) {
-    setGeminiKeyState(v);
-    setGeminiKey(v); // persist to this browser only
-  }
-
   async function enrichExplanation() {
     if (aiBusy || !result) return;
-    const key = (geminiKey || "").trim();
-    if (!key) {
-      setAiError("먼저 Gemini API 키를 입력해 주세요.");
-      return;
-    }
     setAiBusy(true);
     setAiError("");
     try {
       const macro = buildMacro(form);
-      const data = await api.explainAi(macro, key);
+      const data = await api.explainAi(macro);
       if (data.explanation) setExplanation(data.explanation);
-      if (data.ai_error) setAiError(data.ai_error);
+      if (data.ai_available === false) setAiError("AI 해설이 아직 준비되지 않았어요 (서버 설정 필요).");
+      else if (data.ai_error) setAiError(data.ai_error);
     } catch (e) {
       setAiError("AI 호출 실패: " + String(e.message || e));
     } finally {
@@ -233,8 +222,6 @@ export default function Studio() {
             onAiExplain={enrichExplanation}
             aiBusy={aiBusy}
             aiError={aiError}
-            geminiKey={geminiKey}
-            onKeyChange={updateGeminiKey}
             summary={summary}
             dataSource={dataSource}
             periodLabel={periodLabel}
