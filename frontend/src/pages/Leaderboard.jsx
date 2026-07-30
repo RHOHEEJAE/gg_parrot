@@ -23,6 +23,7 @@ export default function Leaderboard() {
   const [items, setItems] = useState([]);
   const [challenge, setChallenge] = useState(null); // 오늘의 AI 챌린지
   const [unlocking, setUnlocking] = useState(0); // entry id being unlocked
+  const [deleting, setDeleting] = useState(0); // entry id being deleted
   const [remain, setRemain] = useState(0);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
@@ -71,6 +72,21 @@ export default function Leaderboard() {
     navigate("/builder", { state: { macro: entry.macro } });
   }
 
+  async function remove(entry) {
+    if (deleting) return;
+    if (!window.confirm("이 매크로를 리더보드에서 삭제할까요? 되돌릴 수 없어요.")) return;
+    setError("");
+    setDeleting(entry.id);
+    try {
+      await api.leaderboardDelete(entry.id);
+      await load();
+    } catch (e) {
+      setError(String(e.message || e));
+    } finally {
+      setDeleting(0);
+    }
+  }
+
   async function unlock(entry) {
     if (!isLoggedIn()) {
       navigate("/login?mode=signup");
@@ -114,14 +130,14 @@ export default function Leaderboard() {
       </div>
 
       {challenge?.active && challenge.symbol && (
-        <div className="mb-4 rounded-2xl border-2 border-indigo-300 bg-indigo-50 px-5 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div className="text-sm text-indigo-900">
+        <div className="mb-4 rounded-2xl bg-indigo-600 px-5 py-4 flex items-center justify-between flex-wrap gap-2 shadow">
+          <div className="text-sm text-white">
             🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요.{" "}
-            <b>AI를 이겨라!</b> 내 매크로를 등록해 순위로 겨뤄보세요.
+            <b className="text-amber-200">AI를 이겨라!</b> 내 매크로를 등록해 순위로 겨뤄보세요.
           </div>
           <button
             onClick={() => setModal({})}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white"
+            className="shrink-0 rounded-lg bg-white hover:bg-indigo-50 px-4 py-1.5 text-sm font-bold text-indigo-700"
           >
             도전하기
           </button>
@@ -201,13 +217,23 @@ export default function Leaderboard() {
                     📋 복사
                   </button>
                 )}
-                {e.is_mine && !e.for_sale && (
+                {(e.is_owner || (e.is_mine && !e.for_sale)) && (
                   <button
                     onClick={() => setModal({ edit: e })}
                     className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    title="비밀번호 확인 후 수정"
+                    title={e.is_owner ? "내 매크로 수정" : "비밀번호 확인 후 수정"}
                   >
                     ✏ 수정
+                  </button>
+                )}
+                {e.is_owner && (
+                  <button
+                    onClick={() => remove(e)}
+                    disabled={deleting === e.id}
+                    className="px-2 py-1 rounded-lg text-sm bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 disabled:opacity-40"
+                    title="내 매크로 삭제"
+                  >
+                    {deleting === e.id ? "삭제 중…" : "🗑 삭제"}
                   </button>
                 )}
               </div>

@@ -146,6 +146,40 @@ def test_anonymous_entry_stays_free_and_visible():
 
 
 # --- crown --------------------------------------------------------------
+def test_owner_can_delete_own_entry_others_cannot():
+    seller_tok, _ = _signup()
+    eid = _register(seller_tok)["id"]
+
+    # a different account cannot delete it
+    other_tok, _ = _signup()
+    assert client.delete(f"/api/leaderboard/{eid}", headers=_auth(other_tok)).status_code == 403
+    # anonymous cannot delete
+    assert client.delete(f"/api/leaderboard/{eid}").status_code == 401
+    # owner can
+    assert client.delete(f"/api/leaderboard/{eid}", headers=_auth(seller_tok)).status_code == 200
+    # and it's gone from the board
+    items = client.get("/api/leaderboard").json()["items"]
+    assert all(e["id"] != eid for e in items)
+
+
+def test_account_owner_edits_without_password(monkeypatch):
+    seller_tok, _ = _signup()
+    eid = _register(seller_tok)["id"]
+    new_macro = {**_MACRO, "symbol": "ETHUSDT"}
+    res = client.post(f"/api/leaderboard/{eid}/edit",
+                      json={"macro": new_macro, "password": "", "mode": "live"},
+                      headers=_auth(seller_tok))
+    assert res.status_code == 200, res.text
+    assert res.json()["entry"]["symbol"] == "ETHUSDT"
+
+    # a non-owner account is rejected (no password fallback for owned entries)
+    other_tok, _ = _signup()
+    res2 = client.post(f"/api/leaderboard/{eid}/edit",
+                       json={"macro": new_macro, "password": "", "mode": "live"},
+                       headers=_auth(other_tok))
+    assert res2.status_code == 403
+
+
 def test_crown_after_enough_sales_and_likes(monkeypatch):
     monkeypatch.setattr(lb, "CROWN_MIN_SALES", 2)
     monkeypatch.setattr(lb, "CROWN_MIN_LIKES", 2)

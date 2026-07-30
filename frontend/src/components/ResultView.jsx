@@ -28,14 +28,20 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
         <div className="flex items-start gap-3">
           <div className="text-2xl leading-none select-none" aria-hidden>🦜</div>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold text-slate-500 mb-1">✨ AI 원인 분석</div>
+            <div className="text-[11px] font-semibold text-indigo-600 mb-1">✨ 껄무새 AI 해설</div>
             <div className={"text-base font-extrabold " + accent}>{explanation.headline}</div>
             {explanation.points?.length > 0 && (
-              <ul className="mt-2 space-y-1 text-sm text-slate-700 list-disc pl-5">
+              <ul className="mt-2 space-y-1.5 text-sm text-slate-800 list-disc pl-5">
                 {explanation.points.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
               </ul>
+            )}
+            {explanation.lesson && (
+              <div className="mt-3 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-900">
+                <span className="font-bold">🧭 이 매크로를 쓴다면 · </span>
+                {explanation.lesson}
+              </div>
             )}
             <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
               <div className="text-[11px] text-slate-400">{explanation.disclaimer}</div>
@@ -43,7 +49,7 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
                 type="button"
                 onClick={onAiExplain}
                 disabled={aiBusy}
-                className="text-[11px] text-slate-500 underline disabled:opacity-40"
+                className="text-xs text-indigo-600 font-medium underline disabled:opacity-40"
               >
                 {aiBusy ? "분석 중…" : "다시 분석"}
               </button>
@@ -59,16 +65,16 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
     <div className="rounded-2xl border border-slate-200 bg-surface p-5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          🦜 AI 원인 분석
-          <span className="text-xs font-normal text-slate-400">이 결과가 왜 이렇게 나왔는지 5줄로 분석해줘요</span>
+          🦜 껄무새 AI 해설
+          <span className="text-xs font-normal text-slate-500">이 결과가 왜 이렇게 나왔는지 쉽게 정리해줘요</span>
         </div>
         <button
           type="button"
           onClick={onAiExplain}
           disabled={aiBusy}
-          className="shrink-0 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
+          className="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-5 py-2 text-sm font-bold text-white shadow-sm"
         >
-          {aiBusy ? "분석 중…" : "분석하기"}
+          {aiBusy ? "분석 중…" : "✨ 분석하기"}
         </button>
       </div>
       {aiError && <div className="mt-2 text-xs text-red-600">{aiError}</div>}

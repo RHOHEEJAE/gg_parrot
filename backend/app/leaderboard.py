@@ -140,6 +140,19 @@ def update_entry(
     return _entry_view(row, {}, viewer_id=viewer, viewer_user_id=owner)
 
 
+def delete_entry(entry_id: int) -> Optional[int]:
+    """Delete an entry; returns its paper_session_id (to stop) or None if absent.
+    Caller must verify ownership first."""
+    with get_session() as db:
+        row = db.get(LeaderboardEntry, entry_id)
+        if row is None:
+            return None
+        sid = row.paper_session_id
+        db.delete(row)
+        db.commit()
+        return sid
+
+
 def _vote_tallies(db, entry_ids: list[int]) -> dict[int, dict]:
     """entry_id -> {likes, dislikes, votes_by_user: {user_id: value}}."""
     tallies: dict[int, dict] = {eid: {"likes": 0, "dislikes": 0, "by_user": {}} for eid in entry_ids}

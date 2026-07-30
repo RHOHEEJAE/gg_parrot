@@ -100,8 +100,11 @@ export const api = {
   leaderboardEdit: (entryId, macro, password, mode) =>
     req(`/api/leaderboard/${entryId}/edit`, {
       method: "POST",
-      body: JSON.stringify({ macro, password, mode: mode || "live" }),
+      body: JSON.stringify({ macro, password: password || "", mode: mode || "live" }),
     }),
+  // 계정 소유 엔트리 삭제 (로그인 필요, 소유자만).
+  leaderboardDelete: (entryId) =>
+    req(`/api/leaderboard/${entryId}`, { method: "DELETE" }),
   leaderboardVote: (entryId, userId, value) =>
     req(`/api/leaderboard/${entryId}/vote`, {
       method: "POST",

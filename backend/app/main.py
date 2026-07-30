@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -538,6 +538,7 @@ def _edit_rate_fail(entry_id: int, ip: str) -> None:
 async def leaderboard_register(
     req: LeaderboardRegisterRequest,
     account: Optional[User] = Depends(auth_mod.optional_user),
+    authorization: Optional[str] = Header(default=None),
 ) -> dict:
     """Register a macro: start its paper session and add it to today's board.
 
@@ -551,6 +552,11 @@ async def leaderboard_register(
         username = account.username
         password_hash = ""  # account-owned; edited via the account, not a password
     else:
+        # A Bearer token was sent but no account resolved -> the session is stale
+        # (expired, or the account no longer exists). Tell the user to re-login
+        # instead of demanding an id/password they don't have.
+        if authorization and authorization.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="세션이 만료됐어요. 다시 로그인해 주세요.")
         if not req.username.strip() or not req.password:
             raise HTTPException(status_code=400, detail="아이디와 비밀번호를 모두 입력하세요.")
         owner_user_id = None
@@ -605,29 +611,38 @@ def leaderboard_vote(entry_id: int, req: VoteRequest) -> dict:
 
 
 @app.post("/api/leaderboard/{entry_id}/edit")
-async def leaderboard_edit(entry_id: int, req: LeaderboardEditRequest, request: Request) -> dict:
-    """Edit an entry's macro after verifying the password (server-side hash check).
-
-    On success the old paper session is stopped and a new one starts with the
-    updated macro. Failed attempts are rate-limited per (entry, client IP).
-    """
-    ip = request.client.host if request.client else "unknown"
-    _edit_rate_check(entry_id, ip)
-    if leaderboard_mod.get_entry(entry_id) is None:
+async def leaderboard_edit(
+    entry_id: int,
+    req: LeaderboardEditRequest,
+    request: Request,
+    account: Optional[User] = Depends(auth_mod.optional_user),
+) -> dict:
+    """Edit an entry's macro. Account-owned entries authorize via the logged-in
+    owner (no password); legacy anonymous entries verify the edit password
+    (rate-limited per entry+IP). Restarts the paper session on success."""
+    old = leaderboard_mod.get_entry(entry_id)
+    if old is None:
         raise HTTPException(status_code=404, detail="엔트리를 찾을 수 없습니다.")
-    if not leaderboard_mod.verify_owner(entry_id, req.password):
-        _edit_rate_fail(entry_id, ip)
-        raise HTTPException(status_code=403, detail="비밀번호가 일치하지 않습니다.")
+
+    is_account_owner = (
+        old.owner_user_id is not None and account is not None and account.id == old.owner_user_id
+    )
+    if not is_account_owner:
+        if old.owner_user_id is not None:
+            raise HTTPException(status_code=403, detail="내가 등록한 매크로만 수정할 수 있어요.")
+        ip = request.client.host if request.client else "unknown"
+        _edit_rate_check(entry_id, ip)
+        if not leaderboard_mod.verify_owner(entry_id, req.password):
+            _edit_rate_fail(entry_id, ip)
+            raise HTTPException(status_code=403, detail="비밀번호가 일치하지 않습니다.")
 
     macro = req.macro
     mode = "replay" if req.mode == "replay" else "live"
-    # Restart the paper session with the new macro (spot guard applies).
-    old = leaderboard_mod.get_entry(entry_id)
     try:
         info = await paper_mod.start_session(macro, macro.symbol, mode)
     except NoSpotDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    if old and old.paper_session_id:
+    if old.paper_session_id:
         paper_mod.stop_session(old.paper_session_id)
     entry = leaderboard_mod.update_entry(
         entry_id,
@@ -637,6 +652,20 @@ async def leaderboard_edit(entry_id: int, req: LeaderboardEditRequest, request: 
         paper_session_id=info["session_id"],
     )
     return {"entry": entry}
+
+
+@app.delete("/api/leaderboard/{entry_id}")
+def leaderboard_delete(entry_id: int, account: User = Depends(auth_mod.current_user)) -> dict:
+    """Delete one of my own (account-owned) leaderboard entries."""
+    entry = leaderboard_mod.get_entry(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="엔트리를 찾을 수 없습니다.")
+    if entry.owner_user_id != account.id:
+        raise HTTPException(status_code=403, detail="내가 등록한 매크로만 삭제할 수 있어요.")
+    sid = leaderboard_mod.delete_entry(entry_id)
+    if sid:
+        paper_mod.stop_session(sid)
+    return {"ok": True}
 
 
 # --- leaderboard chat (daily KST board) ---------------------------------

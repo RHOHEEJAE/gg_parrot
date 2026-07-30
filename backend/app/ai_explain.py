@@ -32,19 +32,24 @@ _DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
 _MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", "2048"))
 
 _SYSTEM = (
-    "너는 코인 백테스트 결과의 '원인'을 초보에게 짧고 명확하게 설명하는 도우미야. "
-    "규칙: (1) 반드시 한국어. (2) 주어진 숫자만 근거로 쓰고 새로운 수치를 지어내지 마. "
-    "(3) 과거 결과가 '왜' 이렇게 나왔는지 원인만 분석하고, 미래 예측이나 "
-    "'사라/팔아라/추천' 같은 투자 조언은 절대 하지 마. "
-    "(4) 쉽고 간결하게. 전체가 headline 1줄 + points 최대 4줄 = 5줄을 넘지 마. "
+    "너는 코인 '코린이(초보)'에게 백테스트 결과를 쉽게 풀어주는 도우미 '껄무새'야. "
+    "규칙: (1) 반드시 한국어, 어려운 용어는 풀어서. (2) 주어진 숫자만 근거로 쓰고 "
+    "새 수치를 지어내지 마. (3) 과거 결과의 원인만 설명하고, 미래 예측이나 "
+    "'사라/팔아라/추천·수익보장' 같은 투자 조언은 절대 하지 마. "
+    "(4) 전체가 10줄을 넘지 않게 간결하게. 두 가지를 담아: "
+    "① 왜 이런 결과가 나왔는지(원인), ② 이 매크로를 실제로 쓴다면 어떤 성격·리스크의 "
+    "전략인지, 어떤 장세에 맞고 뭘 주의해야 하는지(교육적 관점, 예측·조언 아님). "
     "출력은 코드펜스 없이 JSON 객체 하나만: "
-    '{"mood": "<' + "|".join(MOODS) + '>", "headline": "<핵심 원인 한 문장>", '
-    '"points": ["<숫자 근거 원인 1>", "..."]}'
+    '{"mood": "<' + "|".join(MOODS) + '>", '
+    '"headline": "<결과 핵심을 쉬운 한 문장으로>", '
+    '"points": ["<숫자를 근거로 한 원인 3~4개, 각 한 줄 쉬운 말>"], '
+    '"lesson": "<이 매크로를 실제로 쓴다면의 관점: 성격/리스크/주의점 1~2문장>"}'
 )
 
 _USER_PROMPT = (
-    "다음 백테스트 지표(JSON)를 보고 '왜 이런 결과가 나왔는지' 원인을 분석해서 "
-    "지정된 JSON으로만 답해줘. points는 위 숫자를 근거로 한 원인 2~3개.\n지표:\n"
+    "다음 백테스트 지표(JSON)를 코린이 눈높이로 쉽게 풀어줘. headline은 결과 핵심 한 줄, "
+    "points는 숫자 근거 원인 3~4개(각 한 줄), lesson은 '이 매크로를 실제로 쓴다면' 관점. "
+    "전체 10줄 이내. 지정된 JSON으로만.\n지표:\n"
 )
 
 
@@ -137,8 +142,8 @@ def generate(macro: Macro, result: BacktestResult, *, model: Optional[str] = Non
         raise AiError("AI 응답 형식이 올바르지 않아요.")
 
     headline = str(obj.get("headline", "")).strip()
-    # Hard cap: headline + up to 4 points = 5 lines max.
-    points = [str(p) for p in obj.get("points", []) if str(p).strip()][:4]
+    # ~10-line cap: headline + up to 5 points + a 1-2 line "apply" lesson.
+    points = [str(p) for p in obj.get("points", []) if str(p).strip()][:5]
     if not headline or not points:
         raise AiError("AI 응답이 비어 있어요.")
 

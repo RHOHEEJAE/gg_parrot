@@ -109,11 +109,11 @@ def test_code_fenced_json_is_parsed(monkeypatch):
     assert ai_explain.generate(_macro(), _result()).source == "ai"
 
 
-def test_points_capped_at_four(monkeypatch):
+def test_points_capped_at_five(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     many = json.dumps({"mood": "win", "headline": "원인", "points": [f"p{i}" for i in range(8)]})
     _patch_anthropic(monkeypatch, many)
-    assert len(ai_explain.generate(_macro(), _result()).points) == 4
+    assert len(ai_explain.generate(_macro(), _result()).points) == 5
 
 
 def test_incomplete_reply_raises_aierror(monkeypatch):
