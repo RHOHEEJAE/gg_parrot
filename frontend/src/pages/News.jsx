@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
+import { AnnotatedText, TermChips } from "../components/NewsTerms.jsx";
 
 // '오늘의 코인동향' — 무료(Google News RSS) 뉴스 요약 페이지.
 // 팩트(실제 헤드라인 + 원문 링크)를 그대로 보여주고, 시장 페이지 상단에만
@@ -92,6 +93,7 @@ function CoinRow({ coin }) {
           {data && (
             <>
               <NewsList items={data.items} empty={`${data.coin_name || coinOf(coin.symbol)} 관련 최근 뉴스가 없어요.`} />
+              {data.items?.length > 0 && <TermChips texts={data.items.map((i) => i.title)} />}
               <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
                 <Link to={`/builder?symbol=${encodeURIComponent(coin.symbol)}`} className="text-xs text-indigo-600 hover:underline">
                   이 코인으로 매크로 만들기 →
@@ -147,7 +149,9 @@ export default function News() {
           {market.overview ? (
             <div className="mt-2 rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-3">
               <div className="text-[11px] font-semibold text-indigo-600 mb-1">🦜 껄무새 AI 요약</div>
-              <p className="text-sm text-indigo-900 whitespace-pre-line leading-relaxed">{market.overview}</p>
+              <p className="text-sm text-indigo-900 whitespace-pre-line leading-relaxed">
+                <AnnotatedText text={market.overview} />
+              </p>
             </div>
           ) : (
             <p className="text-sm text-slate-500 mt-1">아래 최신 헤드라인을 확인해 보세요.</p>
@@ -155,6 +159,7 @@ export default function News() {
 
           <h3 className="mt-5 mb-1 text-sm font-semibold text-slate-600">최신 헤드라인</h3>
           <NewsList items={market.items} empty="지금은 불러올 뉴스가 없어요. 잠시 후 다시 시도해 주세요." />
+          <TermChips texts={[market.overview, ...(market.items || []).map((i) => i.title)]} />
           {market.disclaimer && <Disclaimer text={market.disclaimer} />}
         </section>
       )}
