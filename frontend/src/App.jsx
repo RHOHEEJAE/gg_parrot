@@ -5,6 +5,7 @@ import Leaderboard from "./pages/Leaderboard.jsx";
 import Auth from "./pages/Auth.jsx";
 import MyPage from "./pages/MyPage.jsx";
 import Guide from "./pages/Guide.jsx";
+import News from "./pages/News.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import { api } from "./api.js";
@@ -35,6 +36,9 @@ function Nav() {
             </NavLink>
             <NavLink to="/builder" className={cls}>
               빌더
+            </NavLink>
+            <NavLink to="/news" className={cls}>
+              코인동향
             </NavLink>
             <NavLink to="/guide" className={cls}>
               가이드
@@ -110,6 +114,7 @@ export default function App() {
           <Route path="/s/:slug" element={<Studio />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/guide" element={<Guide />} />
+          <Route path="/news" element={<News />} />
           <Route path="/login" element={<Auth />} />
           <Route path="/forgot" element={<ForgotPassword />} />
           <Route path="/reset" element={<ResetPassword />} />

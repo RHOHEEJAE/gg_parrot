@@ -77,6 +77,11 @@ export const api = {
   // '오늘의 경주마' hot coins (server-cached, shared across clients)
   hotCoins: (limit) => req(`/api/hot-coins?limit=${limit || 10}`),
 
+  // '오늘의 코인동향' — 시장·규제 뉴스 헤드라인 + AI 중립 개요 (KST 하루 1회 캐시)
+  newsMarket: () => req("/api/news/market"),
+  // '경주마 동향' — 코인별 최신 뉴스 헤드라인
+  newsCoin: (symbol) => req(`/api/news/coin/${encodeURIComponent(symbol)}`),
+
   // 한강 수온 (server-cached proxy of the public Hangang temperature API)
   hangangTemp: () => req("/api/hangang-temp"),
 

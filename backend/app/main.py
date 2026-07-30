@@ -32,6 +32,7 @@ from . import chat as chat_mod
 from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
 from . import kimchi as kimchi_mod
+from . import news as news_mod
 from . import leaderboard as leaderboard_mod
 from . import optimize as optimize_mod
 from . import paper as paper_mod
@@ -495,6 +496,21 @@ def hot_coins(limit: int = 10) -> dict:
     of client count. Reference indicator only — never a trading signal.
     """
     return hotcoins_mod.get_hot_coins(limit)
+
+
+@app.get("/api/news/market")
+def news_market() -> dict:
+    """'오늘의 코인동향' — 시장·규제 전반 뉴스 헤드라인 + AI 중립 개요.
+
+    Google News RSS(무료) 기반. KST 하루 1회만 요약해 캐시(정보 제공용, 자문 아님).
+    """
+    return news_mod.get_market_news()
+
+
+@app.get("/api/news/coin/{symbol}")
+def news_coin(symbol: str) -> dict:
+    """'경주마 동향' — 특정 코인의 최신 뉴스 헤드라인(요약 목록). 캐시."""
+    return news_mod.get_coin_news(symbol)
 
 
 # [차후 도입] '고래 동향' — 온체인 상위 지갑 매수/매도 흐름 (참고 지표).
