@@ -130,17 +130,10 @@ export default function Leaderboard() {
       </div>
 
       {challenge?.active && challenge.symbol && (
-        <div className="mb-4 rounded-2xl bg-indigo-600 px-5 py-4 flex items-center justify-between flex-wrap gap-2 shadow">
+        <div className="mb-4 rounded-2xl bg-indigo-600 px-5 py-4 shadow">
           <div className="text-sm text-white">
-            🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요.{" "}
-            <b className="text-amber-200">AI를 이겨라!</b> 내 매크로를 등록해 순위로 겨뤄보세요.
+            🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요. 나만의 매크로를 등록해 수익률을 경쟁해 보아요.
           </div>
-          <button
-            onClick={() => setModal({})}
-            className="shrink-0 rounded-lg bg-white hover:bg-indigo-50 px-4 py-1.5 text-sm font-bold text-indigo-700"
-          >
-            도전하기
-          </button>
         </div>
       )}
 
