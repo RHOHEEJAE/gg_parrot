@@ -4,6 +4,8 @@ import Studio from "./pages/Studio.jsx";
 import Leaderboard from "./pages/Leaderboard.jsx";
 import Auth from "./pages/Auth.jsx";
 import MyPage from "./pages/MyPage.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 import { api } from "./api.js";
 import { useAuth, clearAuth, updateAuthUser } from "./lib/auth.js";
 import SimBadge from "./components/SimBadge.jsx";
@@ -104,6 +106,8 @@ export default function App() {
           <Route path="/s/:slug" element={<Studio />} />
           <Route path="/mypage" element={<MyPage />} />
           <Route path="/login" element={<Auth />} />
+          <Route path="/forgot" element={<ForgotPassword />} />
+          <Route path="/reset" element={<ResetPassword />} />
           <Route path="/leaderboard" element={<Navigate to="/" replace />} />
           <Route path="/gallery" element={<Navigate to="/" replace />} />
         </Routes>

@@ -146,6 +146,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ForgotRequest(BaseModel):
+    email: str
+
+
+class ResetRequest(BaseModel):
+    token: str
+    password: str
+
+
 class ExplainAiRequest(BaseModel):
     macro: Macro
     period_override: Optional[Period] = None
@@ -195,6 +204,17 @@ def auth_signup(req: SignupRequest) -> dict:
 @app.post("/api/auth/login")
 def auth_login(req: LoginRequest) -> dict:
     return auth_mod.login(req.email, req.password)
+
+
+@app.post("/api/auth/forgot")
+def auth_forgot(req: ForgotRequest) -> dict:
+    """Email a password-reset link (no-op delivery until email is configured)."""
+    return auth_mod.request_password_reset(req.email)
+
+
+@app.post("/api/auth/reset")
+def auth_reset(req: ResetRequest) -> dict:
+    return auth_mod.reset_password(req.token, req.password)
 
 
 @app.get("/api/auth/me")

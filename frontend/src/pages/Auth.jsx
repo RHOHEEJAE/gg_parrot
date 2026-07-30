@@ -74,6 +74,15 @@ export default function Auth() {
           </button>
         </form>
 
+        {!isSignup && (
+          <div className="mt-3 text-center">
+            <button className="text-xs text-slate-500 hover:text-indigo-600 underline"
+              onClick={() => navigate("/forgot")}>
+              비밀번호를 잊으셨나요?
+            </button>
+          </div>
+        )}
+
         <div className="mt-4 text-sm text-slate-500 text-center">
           {isSignup ? "이미 계정이 있나요?" : "계정이 없나요?"}{" "}
           <button

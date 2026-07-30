@@ -18,6 +18,7 @@ import jwt
 from fastapi import Header, HTTPException
 from sqlmodel import select
 
+from . import email_service
 from . import points as points_mod
 from .db import User, get_session
 from .security import hash_password, verify_password
@@ -26,6 +27,8 @@ from .security import hash_password, verify_password
 SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-insecure-secret-change-me-in-production-0123456789"
 _JWT_ALGO = "HS256"
 _TOKEN_TTL_HOURS = int(os.environ.get("SESSION_TTL_HOURS", "168"))  # 7 days
+_RESET_TTL_MIN = int(os.environ.get("RESET_TTL_MINUTES", "30"))
+_FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "").rstrip("/")
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_가-힣]{2,20}$")
@@ -113,6 +116,67 @@ def login(email: str, password: str) -> dict:
 def get_user_by_id(user_id: int) -> Optional[User]:
     with get_session() as db:
         return db.get(User, user_id)
+
+
+# --- password reset -----------------------------------------------------
+def _make_reset_token(user_id: int) -> str:
+    payload = {
+        "sub": str(user_id),
+        "purpose": "reset",
+        "iat": int(_now().timestamp()),
+        "exp": int((_now() + timedelta(minutes=_RESET_TTL_MIN)).timestamp()),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=_JWT_ALGO)
+
+
+def _decode_reset_token(token: str) -> int:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[_JWT_ALGO])
+        if payload.get("purpose") != "reset":
+            raise ValueError("wrong purpose")
+        return int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise AuthError(400, "재설정 링크가 만료됐거나 유효하지 않아요. 다시 요청해 주세요.")
+
+
+def request_password_reset(email: str) -> dict:
+    """Email a reset link if the account exists. Always reports success (no
+    account enumeration). Actual delivery requires RESEND_API_KEY to be set."""
+    email = (email or "").strip().lower()
+    with get_session() as db:
+        user = db.exec(select(User).where(User.email == email)).first()
+    if user is not None:
+        token = _make_reset_token(user.id)
+        link = f"{_FRONTEND_BASE_URL}/reset?token={token}"
+        html = (
+            "<div style='font-family:sans-serif'>"
+            "<h2>🦜 GGparrot 비밀번호 재설정</h2>"
+            f"<p>아래 버튼을 눌러 새 비밀번호를 설정하세요. (링크는 {_RESET_TTL_MIN}분간 유효)</p>"
+            f"<p><a href='{link}' style='background:#4f46e5;color:#fff;padding:10px 16px;"
+            "border-radius:8px;text-decoration:none'>비밀번호 재설정</a></p>"
+            "<p style='color:#888;font-size:12px'>본인이 요청하지 않았다면 이 메일을 무시하세요.</p>"
+            "</div>"
+        )
+        email_service.send_email(email, "[GGparrot] 비밀번호 재설정", html)
+    return {
+        "ok": True,
+        "message": "가입된 이메일이면 재설정 링크를 보냈어요. 메일함(스팸함 포함)을 확인해 주세요.",
+        "email_enabled": email_service.email_enabled(),
+    }
+
+
+def reset_password(token: str, new_password: str) -> dict:
+    if len(new_password or "") < 8:
+        raise AuthError(400, "비밀번호는 8자 이상이어야 해요.")
+    user_id = _decode_reset_token(token)
+    with get_session() as db:
+        user = db.get(User, user_id)
+        if user is None:
+            raise AuthError(400, "계정을 찾을 수 없어요.")
+        user.password_hash = hash_password(new_password)
+        db.add(user)
+        db.commit()
+    return {"ok": True, "message": "비밀번호가 변경됐어요. 새 비밀번호로 로그인해 주세요."}
 
 
 def current_user(authorization: Optional[str] = Header(default=None)) -> User:

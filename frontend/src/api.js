@@ -28,6 +28,10 @@ export const api = {
     req("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   me: () => req("/api/auth/me"),
   myDashboard: () => req("/api/me/dashboard"),
+  forgotPassword: (email) =>
+    req("/api/auth/forgot", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token, password) =>
+    req("/api/auth/reset", { method: "POST", body: JSON.stringify({ token, password }) }),
 
   createMacro: (macro) => req("/api/macros", { method: "POST", body: JSON.stringify(macro) }),
   getMacro: (slug) => req(`/api/macros/${slug}`),
