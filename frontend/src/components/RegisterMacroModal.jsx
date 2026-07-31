@@ -71,14 +71,14 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/60 overflow-y-auto">
-      <div className="w-full max-w-2xl my-8 rounded-2xl bg-surface border border-slate-300 shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-surface rounded-t-2xl z-10">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 bg-black/60 overflow-y-auto">
+      <div className="w-full max-w-2xl my-4 sm:my-8 rounded-2xl bg-surface border border-slate-300 shadow-2xl">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 sticky top-0 bg-surface rounded-t-2xl z-10">
           <h3 className="text-lg font-semibold">{isEdit ? "매크로 수정" : "나만의 매크로 등록"}</h3>
           <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-xl leading-none" aria-label="닫기">✕</button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-4 sm:px-6 py-5 space-y-5">
           {needsLogin ? (
             <div className="rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-4 text-center">
               <div className="text-sm text-indigo-900 mb-3">
@@ -92,7 +92,7 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
               </button>
             </div>
           ) : accountEdit || asAccount ? (
-            <div className="grid grid-cols-2 gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
               <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-900">
                 👤 <b>@{user.username}</b> 계정{accountEdit ? "의 매크로를 수정해요." : "으로 등록돼요. 남이 언락하면 포인트 70% 적립."}
               </div>
@@ -101,7 +101,7 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
           ) : (
             // legacy anonymous edit — password required
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <label className="block">
                   <span className="text-sm text-slate-700 mb-1 block">아이디</span>
                   <input className={inputCls + " opacity-60"} value={editEntry.username || ""} disabled />
@@ -128,7 +128,7 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
           )}
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-200 sticky bottom-0 bg-surface rounded-b-2xl">
+        <div className="flex justify-end gap-3 px-4 sm:px-6 py-4 border-t border-slate-200 sticky bottom-0 bg-surface rounded-b-2xl">
           <button onClick={onClose} disabled={busy} className="rounded-lg bg-slate-200 hover:bg-slate-300 px-5 py-2.5 font-semibold disabled:opacity-40">
             {needsLogin ? "닫기" : "취소"}
           </button>

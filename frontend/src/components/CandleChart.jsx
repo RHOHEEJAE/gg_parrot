@@ -111,6 +111,15 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
     [n, slot]
   );
 
+  // Pointer (not mouse) events so a finger can pan too. `touch-pan-y` hands us
+  // horizontal drags while vertical swipes still scroll the page — with
+  // `touch-none` the chart was a dead zone the page couldn't be scrolled past.
+  function handleDown(e) {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    drag.current = { x: e.clientX, panned: false };
+    if (e.pointerType === "mouse") setHover(null);
+  }
+
   function handleMove(e) {
     if (drag.current !== null) {
       const rect = svgRef.current?.getBoundingClientRect();
@@ -119,31 +128,36 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
         const moved = Math.round((drag.current.x - e.clientX) / perBar);
         if (moved !== 0) {
           onPan(moved);
-          drag.current = { x: e.clientX };
+          drag.current = { x: e.clientX, panned: true };
         }
       }
       return;
     }
-    setHover(indexAt(e));
+    if (e.pointerType === "mouse") setHover(indexAt(e));
+  }
+
+  function handleUp(e) {
+    const d = drag.current;
+    drag.current = null;
+    // A tap that didn't pan inspects the bar under the finger.
+    if (d && !d.panned && e.pointerType !== "mouse") setHover(indexAt(e));
   }
 
   return (
     <svg
       ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-auto touch-none select-none cursor-crosshair"
+      className="w-full h-auto touch-pan-y select-none cursor-crosshair"
       role="img"
       aria-label={`${symbol} 봉차트`}
-      onMouseMove={handleMove}
-      onMouseLeave={() => {
-        setHover(null);
+      onPointerMove={handleMove}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setHover(null);
         drag.current = null;
       }}
-      onMouseDown={(e) => {
-        drag.current = { x: e.clientX };
-        setHover(null);
-      }}
-      onMouseUp={() => (drag.current = null)}
+      onPointerDown={handleDown}
+      onPointerUp={handleUp}
+      onPointerCancel={() => (drag.current = null)}
     >
       {guides.map((v, i) => (
         <g key={i}>
@@ -313,7 +327,7 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
     "rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 px-2 py-1 text-sm leading-none";
 
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-5">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="flex items-baseline gap-2">
           <h3 className="font-semibold">📈 {symbol}</h3>

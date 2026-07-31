@@ -153,10 +153,10 @@ export default function Leaderboard() {
         {items.map((e, idx) => {
           const r = ret(e);
           return (
-            <div key={e.id} className="rounded-2xl bg-surface border border-slate-200 p-4 flex items-center gap-4 flex-wrap">
-              <div className="w-8 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
+            <div key={e.id} className="rounded-2xl bg-surface border border-slate-200 p-3 sm:p-4 flex items-center gap-2 sm:gap-4 flex-wrap">
+              <div className="w-6 sm:w-8 shrink-0 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
                   <span className="font-semibold text-slate-900 truncate">{e.is_ai ? "GGparrot AI" : (e.username || e.nickname)}</span>
                   {e.is_ai && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold">🤖 AI</span>}
@@ -175,9 +175,11 @@ export default function Leaderboard() {
                 )}
               </div>
 
-              <div className={"w-24 text-right text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
+              <div className={"w-20 sm:w-24 shrink-0 text-right text-lg sm:text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
 
-              <div className="flex items-center gap-1">
+              {/* Five action buttons never fit beside the summary on a phone —
+                  give them their own full-width row below it. */}
+              <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto justify-end">
                 <button
                   onClick={() => vote(e.id, 1)}
                   className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === 1 ? "bg-green-600 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}

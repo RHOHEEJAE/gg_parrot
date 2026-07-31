@@ -137,7 +137,7 @@ export default function OptimizePanel({ form, setForm, valErr }) {
   const isBest = (tp, sl) => data?.best && data.best.tp === tp && data.best.sl === sl;
 
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-5 space-y-4">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center text-sm font-semibold text-slate-700">
           🔍 익절 / 손절 자동 최적화

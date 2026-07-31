@@ -38,7 +38,7 @@ export default function Auth() {
 
   return (
     <div className="max-w-sm mx-auto">
-      <div className="rounded-2xl bg-surface border border-slate-200 p-6">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
         <div className="text-2xl mb-1">🦜</div>
         <h1 className="text-xl font-bold mb-1">{isSignup ? "회원가입" : "로그인"}</h1>
         <p className="text-sm text-slate-500 mb-5">

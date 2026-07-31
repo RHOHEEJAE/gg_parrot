@@ -14,7 +14,7 @@ const REASON_KO = {
 
 function Section({ title, count, children }) {
   return (
-    <section className="rounded-2xl bg-surface border border-slate-200 p-5">
+    <section className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="font-semibold text-slate-800">{title}</h3>
         {count != null && <span className="text-xs text-slate-400">({count})</span>}
@@ -56,7 +56,7 @@ export default function MyPage() {
   return (
     <div className="space-y-6">
       {/* profile + tier + points */}
-      <div className="rounded-2xl bg-surface border border-slate-200 p-6 flex items-center justify-between flex-wrap gap-4">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6 flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">{tier.icon}</span>

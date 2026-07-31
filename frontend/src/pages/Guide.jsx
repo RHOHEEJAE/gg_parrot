@@ -730,6 +730,7 @@ const SECTIONS = BASE_SECTIONS;
 export default function Guide() {
   const [q, setQ] = useState("");
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const [tocOpen, setTocOpen] = useState(false); // mobile only; ≥md the list is always shown
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -743,7 +744,7 @@ export default function Guide() {
   const active = filtered.find((s) => s.id === activeId) || filtered[0] || null;
 
   return (
-    <div className="grid md:grid-cols-[230px_1fr] gap-6">
+    <div className="grid md:grid-cols-[230px_1fr] gap-4 md:gap-6">
       {/* sidebar */}
       <aside className="md:sticky md:top-20 self-start">
         <input
@@ -752,11 +753,25 @@ export default function Guide() {
           placeholder="🔍 가이드 검색…"
           className="w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
-        <nav className="space-y-1">
+        {/* On a phone the full contents list would push every article a screen
+            and a half down, so it collapses behind the current section name. */}
+        <button
+          type="button"
+          onClick={() => setTocOpen((v) => !v)}
+          aria-expanded={tocOpen}
+          className="md:hidden w-full mb-2 flex items-center justify-between gap-2 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+        >
+          <span className="truncate">📑 목차 · {active ? active.title : "문서 선택"}</span>
+          <span className="shrink-0 text-slate-400">{tocOpen ? "▲" : "▼"}</span>
+        </button>
+        <nav className={(tocOpen ? "block " : "hidden ") + "md:block space-y-1"}>
           {filtered.map((s) => (
             <button
               key={s.id}
-              onClick={() => setActiveId(s.id)}
+              onClick={() => {
+                setActiveId(s.id);
+                setTocOpen(false);
+              }}
               className={
                 "w-full text-left rounded-lg text-sm " +
                 (s.sub ? "pl-6 pr-3 py-1.5 " : "px-3 py-2 ") +
@@ -777,7 +792,7 @@ export default function Guide() {
       </aside>
 
       {/* content */}
-      <article className="rounded-2xl bg-surface border border-slate-200 p-6 min-w-0">
+      <article className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-6 min-w-0">
         {active ? (
           <>
             {active.sub && (

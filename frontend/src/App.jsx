@@ -21,40 +21,46 @@ import HangangTempBanner from "./components/HangangTempBanner.jsx";
 import HotCoinsMarquee from "./components/HotCoinsMarquee.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 
+const NAV_LINKS = [
+  { to: "/", end: true, label: "오늘의 리더보드" },
+  { to: "/builder", label: "빌더" },
+  { to: "/news", label: "코인동향" },
+  { to: "/board", label: "게시판" },
+  { to: "/guide", label: "가이드" },
+];
+
+// The five Korean menu labels plus the account controls can't share one row on a
+// phone, so below `md` the menu drops to its own horizontally-scrollable strip
+// and only the logo + account controls stay on the top row.
 function Nav() {
   const cls = ({ isActive }) =>
-    "px-3 py-2 rounded-lg text-sm font-medium " +
+    "px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap " +
     (isActive ? "bg-slate-200 text-slate-900" : "text-slate-500 hover:text-slate-900");
+  const links = NAV_LINKS.map((l) => (
+    <NavLink key={l.to} to={l.to} end={l.end} className={cls}>
+      {l.label}
+    </NavLink>
+  ));
   return (
-    <header className="border-b border-slate-200 sticky top-0 bg-surface/80 backdrop-blur z-10">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <NavLink to="/" className="text-base font-bold">
-            🦜 GGparrot
-          </NavLink>
-          <nav className="flex gap-1">
-            <NavLink to="/" end className={cls}>
-              오늘의 리더보드
+    <header className="border-b border-slate-200 sticky top-0 bg-surface/80 backdrop-blur z-20">
+      <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3">
+        <div className="flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <NavLink to="/" className="text-base font-bold shrink-0">
+              🦜 GGparrot
             </NavLink>
-            <NavLink to="/builder" className={cls}>
-              빌더
-            </NavLink>
-            <NavLink to="/news" className={cls}>
-              코인동향
-            </NavLink>
-            <NavLink to="/board" className={cls}>
-              게시판
-            </NavLink>
-            <NavLink to="/guide" className={cls}>
-              가이드
-            </NavLink>
-          </nav>
+            <nav className="hidden md:flex gap-1">{links}</nav>
+          </div>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <SimBadge className="hidden lg:inline-flex" />
+            <AuthNav />
+            <ThemeToggle />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <SimBadge className="hidden sm:inline-flex" />
-          <AuthNav />
-          <ThemeToggle />
-        </div>
+        {/* mobile menu — bleeds to the screen edges so the last item can scroll in */}
+        <nav className="md:hidden -mx-4 mt-1 px-2 flex gap-1 overflow-x-auto no-scrollbar">
+          {links}
+        </nav>
       </div>
     </header>
   );
@@ -75,11 +81,11 @@ function AuthNav() {
     return (
       <div className="flex items-center gap-1">
         <button onClick={() => navigate("/login")}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900">
+          className="px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap text-slate-600 hover:text-slate-900">
           로그인
         </button>
         <button onClick={() => navigate("/login?mode=signup")}
-          className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white">
+          className="px-2.5 sm:px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-indigo-600 hover:bg-indigo-500 text-white">
           회원가입
         </button>
       </div>
@@ -93,12 +99,12 @@ function AuthNav() {
         👤 {user.username}
       </button>
       <button onClick={() => navigate("/mypage")}
-        className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100"
+        className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 sm:px-2.5 py-1 text-xs font-bold whitespace-nowrap text-amber-800 hover:bg-amber-100"
         title="마이페이지 · 보유 포인트">
         🪙 {(user.points_balance ?? 0).toLocaleString()}P
       </button>
       <button onClick={() => { clearAuth(); navigate("/"); }}
-        className="px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900">
+        className="px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap text-slate-500 hover:text-slate-900">
         로그아웃
       </button>
     </div>
@@ -137,12 +143,12 @@ function RequireAuth({ children }) {
 
 export default function App() {
   return (
-    <div className="min-h-screen pb-12">
+    <div className="min-h-screen pb-16">
       <Nav />
       <KimchiBanner />
       <HangangTempBanner />
       {/* [차후 도입] <WhaleBanner /> */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
         <Routes>
           <Route path="/" element={<Leaderboard />} />
           <Route path="/builder" element={<RequireAuth><Studio /></RequireAuth>} />
@@ -159,7 +165,7 @@ export default function App() {
           <Route path="/gallery" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <footer className="max-w-6xl mx-auto px-4 py-8 text-xs text-slate-500">
+      <footer className="max-w-6xl mx-auto px-4 pb-6 pt-2 sm:py-8 text-xs text-slate-500">
         본 서비스는 실거래/자동매매를 하지 않습니다. 모든 수치는 과거 데이터 시뮬레이션 결과입니다.
       </footer>
       <HotCoinsMarquee />

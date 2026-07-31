@@ -7,7 +7,9 @@ import { GLOSSARY } from "../lib/glossary.js";
 // an upward tooltip would be clipped (e.g. the kimchi banner).
 export default function InfoTooltip({ term, text, placement = "top" }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0); // px nudge to keep the bubble on screen
   const ref = useRef(null);
+  const tipRef = useRef(null);
   const content = text || GLOSSARY[term] || "";
   const posCls =
     placement === "bottom"
@@ -21,6 +23,22 @@ export default function InfoTooltip({ term, text, placement = "top" }) {
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
+  }, [open]);
+
+  // The bubble is centred on a 16px icon, so near either screen edge it would
+  // hang off the viewport and give the whole page a horizontal scrollbar.
+  // Measure once per open and slide it back inside.
+  useEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const el = tipRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    if (r.left < margin) setShift(margin - r.left);
+    else if (r.right > window.innerWidth - margin) setShift(window.innerWidth - margin - r.right);
   }, [open]);
 
   if (!content) return null;
@@ -46,9 +64,11 @@ export default function InfoTooltip({ term, text, placement = "top" }) {
       </button>
       {open && (
         <span
+          ref={tipRef}
           role="tooltip"
+          style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
           className={
-            "absolute left-1/2 -translate-x-1/2 w-56 z-40 " +
+            "absolute left-1/2 w-56 max-w-[calc(100vw-1rem)] z-40 " +
             posCls +
             " rounded-lg bg-slate-50 border border-slate-300 px-3 py-2" +
             " text-xs leading-relaxed text-slate-800 shadow-xl"

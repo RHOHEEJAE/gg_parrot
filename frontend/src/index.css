@@ -192,6 +192,28 @@ body {
 :root { color-scheme: light; }
 .dark { color-scheme: dark; }
 
+/* iOS zooms the whole page when a focused control's text is under 16px, and it
+   never zooms back out — the page just ends up wider than the screen. Most of
+   our inputs are `text-sm` (14px), so lift them to 16px on phones. */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Horizontal strips (mobile menu, chip rows) scroll by swipe; a visible bar
+   would eat a line of height on the small screens where they're used. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* '오늘의 경주마' marquee — seamless loop of a duplicated track. */
 @keyframes ggp-marquee {
   from { transform: translateX(0); }

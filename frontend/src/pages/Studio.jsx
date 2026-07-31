@@ -164,7 +164,7 @@ export default function Studio() {
   }
 
   return (
-    <div className="grid lg:grid-cols-2 gap-8">
+    <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
       <section>
         <h2 className="text-lg font-semibold mb-4">매크로 빌더</h2>
         {loadedFrom && (

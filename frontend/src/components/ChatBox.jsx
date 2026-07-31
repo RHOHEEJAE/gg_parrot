@@ -52,7 +52,7 @@ export default function ChatBox() {
   }
 
   return (
-    <div className="mt-10 rounded-2xl bg-surface border border-slate-200 p-5">
+    <div className="mt-10 rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-base font-semibold">💬 리더보드 채팅</h3>
         <span className="text-[11px] text-slate-500">매일 KST 00:00 초기화</span>
@@ -69,20 +69,20 @@ export default function ChatBox() {
         ))}
       </div>
 
-      <form onSubmit={send} className="mt-3 flex gap-2">
+      <form onSubmit={send} className="mt-3 flex flex-wrap gap-2">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={24}
           placeholder="아이디"
-          className="w-28 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-24 sm:w-28 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           maxLength={300}
           placeholder="메시지 입력 (최대 300자)"
-          className="flex-1 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex-1 min-w-[8rem] rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button type="submit" disabled={busy} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white">
           전송

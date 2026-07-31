@@ -144,7 +144,7 @@ export default function News() {
 
       {/* 시장·규제 전반 */}
       {market && (
-        <section className="rounded-2xl bg-surface border border-slate-200 p-6">
+        <section className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-1">🌐 시장·규제 한눈에</h2>
           {market.overview ? (
             <div className="mt-2 rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-3">

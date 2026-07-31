@@ -3,6 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../lib/auth.js";
 
+// Themed input surface. `bg-white` must NOT be used here: it is Tailwind's
+// literal white, while `text-slate-900` flips to near-white under `.dark`
+// (see index.css) — the pair rendered invisible text in dark mode.
+const commentInputCls =
+  "rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
+  "placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
 // 댓글 작성 — 리더보드 채팅처럼 계정 없이 '일회성 이름+비밀번호'를 매번 입력.
 function CommentForm({ postId, onAdded }) {
   const [username, setUsername] = useState("");
@@ -39,14 +46,14 @@ function CommentForm({ postId, onAdded }) {
           onChange={(e) => setUsername(e.target.value)}
           placeholder="이름"
           maxLength={24}
-          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
+          className={"w-1/2 " + commentInputCls}
         />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호(삭제용)"
-          className="w-1/2 rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
+          className={"w-1/2 " + commentInputCls}
         />
       </div>
       <textarea
@@ -55,7 +62,7 @@ function CommentForm({ postId, onAdded }) {
         placeholder="댓글을 입력하세요"
         rows={2}
         maxLength={500}
-        className="w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400"
+        className={"w-full " + commentInputCls}
       />
       {err && <div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center justify-between">
@@ -104,13 +111,13 @@ function Comment({ c, onDeleted }) {
       </div>
       <div className="text-sm text-slate-800 whitespace-pre-line mt-0.5">{c.text}</div>
       {confirming && (
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2 flex-wrap">
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="작성 시 비밀번호"
-            className="rounded-lg bg-white border border-slate-300 px-2 py-1 text-xs text-slate-900 placeholder-slate-400"
+            className="min-w-0 flex-1 sm:flex-none rounded-lg bg-slate-100 border border-slate-300 px-2 py-1 text-xs text-slate-900 placeholder-slate-400"
           />
           <button onClick={remove} disabled={busy} className="rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 px-3 py-1 text-xs font-semibold text-white">
             삭제 확인
@@ -160,7 +167,7 @@ export default function BoardPost() {
     <div className="max-w-3xl mx-auto">
       <Link to="/board" className="text-sm text-indigo-600 hover:underline">← 목록으로</Link>
 
-      <article className="mt-3 rounded-2xl bg-surface border border-slate-200 p-6">
+      <article className="mt-3 rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
         <h1 className="text-xl font-bold text-slate-900">{post.title}</h1>
         <div className="mt-1 flex items-center justify-between gap-2 flex-wrap">
           <div className="text-sm text-slate-500">
@@ -192,7 +199,7 @@ export default function BoardPost() {
         <h2 className="text-sm font-semibold text-slate-700 mb-2">
           댓글 <span className="text-slate-400">({post.comments.length})</span>
         </h2>
-        <div className="rounded-2xl bg-surface border border-slate-200 px-5 divide-y divide-slate-100">
+        <div className="rounded-2xl bg-surface border border-slate-200 px-4 sm:px-5 divide-y divide-slate-100">
           {post.comments.length === 0 ? (
             <div className="py-4 text-sm text-slate-400">첫 댓글을 남겨보세요.</div>
           ) : (

@@ -99,7 +99,7 @@ function PerSymbolTable({ rows }) {
   if (!rows || rows.length === 0) return null;
   const coin = (s) => (s || "").replace(/USDT$|BUSD$|USDC$/, "");
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-5">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
       <div className="text-sm font-semibold text-slate-700 mb-3">
         🧺 종목별 성과 (포트폴리오 · 자금 균등 분할)
       </div>
@@ -185,12 +185,12 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
         </div>
       )}
 
-      <div className="rounded-2xl bg-surface border border-slate-200 p-6">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
         <div className="flex items-center text-sm text-slate-500 mb-1">
           백테스트 수익률 {periodLabel ? `· ${periodLabel}` : ""}
           <InfoTooltip term="backtest" />
         </div>
-        <div className={"text-5xl font-extrabold " + retColor}>
+        <div className={"text-4xl sm:text-5xl font-extrabold " + retColor}>
           {sign}
           {r.final_return_pct.toFixed(2)}%
         </div>
@@ -250,7 +250,7 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
         aiError={aiError}
       />
 
-      <div className="rounded-2xl bg-surface border border-slate-200 p-6">
+      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
         <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>
         <EquityChart curve={r.equity_curve} />
       </div>

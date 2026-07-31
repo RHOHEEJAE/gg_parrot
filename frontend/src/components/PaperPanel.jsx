@@ -112,7 +112,7 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
     running && startedMacro && JSON.stringify(startedMacro) !== JSON.stringify(macro);
 
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-6 space-y-5">
+    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-lg font-semibold">페이퍼 트레이딩 (실시간 모의매매)</h3>
         <div className="flex items-center gap-2">
@@ -208,8 +208,8 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
 
       {/* live figures */}
       {status && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3 min-w-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="col-span-2 sm:col-span-1 rounded-xl bg-slate-100 border border-slate-300 px-4 py-3 min-w-0">
             <div className="text-xs text-slate-500">현재 평가금액 ({quoteOf(macro.symbol)})</div>
             <div className="text-2xl font-bold truncate" title={fmtMoney(status.current_equity, macro.symbol)}>
               {fmtMoneyCompact(status.current_equity, macro.symbol)}
@@ -279,47 +279,51 @@ export default function PaperPanel({ macro, valErr, onRegister }) {
       {status && (
         <div>
           <div className="text-sm text-slate-500 mb-2">실시간 매매 로그 (최신이 위)</div>
-          <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-200">
-            <div className="flex items-center px-4 py-2 text-xs text-slate-500 bg-slate-100 sticky top-0">
-              <span className="w-20">시각</span>
-              <span className="w-16">구분</span>
-              <span className="flex-1 text-right">체결가 ({quoteOf(macro.symbol)})</span>
-              <span className="w-44 text-right">수량 ({baseOf(macro.symbol)})</span>
-              <span className="w-20 text-right">누적수익</span>
-            </div>
-            {(status.trades || []).length === 0 && (
-              <div className="px-4 py-6 text-center text-slate-500 text-sm">
-                아직 체결이 없습니다. 조건을 낮추거나(익절/손절 0.3~1%) 변동성 큰 종목/리플레이를 써보세요.
+          {/* Five fixed columns don't fit a phone, so the log scrolls sideways
+              inside its own box rather than stretching the page. */}
+          <div className="max-h-72 overflow-auto rounded-xl border border-slate-200">
+            <div className="min-w-[460px] divide-y divide-slate-200">
+              <div className="flex items-center px-4 py-2 text-xs text-slate-500 bg-slate-100 sticky top-0">
+                <span className="w-20">시각</span>
+                <span className="w-16">구분</span>
+                <span className="flex-1 text-right">체결가 ({quoteOf(macro.symbol)})</span>
+                <span className="w-28 sm:w-44 text-right">수량 ({baseOf(macro.symbol)})</span>
+                <span className="w-20 text-right">누적수익</span>
               </div>
-            )}
-            {(status.trades || []).map((t, i) => (
-              <div
-                key={t.id}
-                className={
-                  "flex items-center px-4 py-2 text-sm " + (i === 0 ? "bg-indigo-50" : "")
-                }
-              >
-                <span className="text-slate-500 w-20">{t.ts.slice(11, 19)}</span>
-                <span className={"font-semibold w-16 " + (SIDE_COLOR[t.side] || "")}>
-                  {SIDE_KO[t.side] || t.side}
-                </span>
-                <span className="text-slate-700 flex-1 text-right tabular-nums">
-                  {fmtPrice(t.price)}
-                </span>
-                <span className="text-slate-500 w-44 text-right tabular-nums">
-                  {fmtQty(t.qty)}
-                </span>
-                <span
+              {(status.trades || []).length === 0 && (
+                <div className="px-4 py-6 text-center text-slate-500 text-sm">
+                  아직 체결이 없습니다. 조건을 낮추거나(익절/손절 0.3~1%) 변동성 큰 종목/리플레이를 써보세요.
+                </div>
+              )}
+              {(status.trades || []).map((t, i) => (
+                <div
+                  key={t.id}
                   className={
-                    "w-20 text-right tabular-nums " +
-                    (t.return_at_trade >= 0 ? "text-green-600" : "text-red-600")
+                    "flex items-center px-4 py-2 text-sm " + (i === 0 ? "bg-indigo-50" : "")
                   }
                 >
-                  {t.return_at_trade >= 0 ? "+" : ""}
-                  {Number(t.return_at_trade).toFixed(2)}%
-                </span>
-              </div>
-            ))}
+                  <span className="text-slate-500 w-20">{t.ts.slice(11, 19)}</span>
+                  <span className={"font-semibold w-16 " + (SIDE_COLOR[t.side] || "")}>
+                    {SIDE_KO[t.side] || t.side}
+                  </span>
+                  <span className="text-slate-700 flex-1 text-right tabular-nums">
+                    {fmtPrice(t.price)}
+                  </span>
+                  <span className="text-slate-500 w-28 sm:w-44 text-right tabular-nums">
+                    {fmtQty(t.qty)}
+                  </span>
+                  <span
+                    className={
+                      "w-20 text-right tabular-nums " +
+                      (t.return_at_trade >= 0 ? "text-green-600" : "text-red-600")
+                    }
+                  >
+                    {t.return_at_trade >= 0 ? "+" : ""}
+                    {Number(t.return_at_trade).toFixed(2)}%
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
