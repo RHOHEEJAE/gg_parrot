@@ -158,7 +158,9 @@ export default function Leaderboard() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
-                  <span className="font-semibold text-slate-900 truncate">{e.is_ai ? "GGparrot AI" : (e.username || e.nickname)}</span>
+                  {/* AI bots carry their own numbered name (껄무새1호기봇 …) — use
+                      the stored username rather than a hardcoded label. */}
+                  <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
                   {e.is_ai && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold">🤖 AI</span>}
                   {(e.is_owner || e.is_mine) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">내 것</span>}
                   {e.macro?.leverage > 1 && (

@@ -41,13 +41,19 @@ def test_challenge_creates_three_ai_entries_and_is_idempotent(monkeypatch):
     body = r1.json()
     assert body["active"] is True
     assert body["symbol"] == "BTCUSDT"
-    assert body["ai_name"] == "GGparrot_AI"
+    assert body["ai_name"] == "껄무새봇"
 
     # AI entries show on the board flagged is_ai, free/visible (macro present).
     items = client.get("/api/leaderboard").json()["items"]
     ai_entries = [e for e in items if e.get("is_ai")]
     assert len(ai_entries) >= 3
     assert all(e["locked"] is False and e["macro"] is not None for e in ai_entries)
+
+    # Each bot is numbered 1..N. Asserted as a subset because an earlier run on
+    # the same real KST day leaves its own bots on the board.
+    names = {e["username"] for e in ai_entries}
+    assert {"껄무새1호기봇", "껄무새2호기봇", "껄무새3호기봇"} <= names
+    assert all(n.startswith("껄무새") and n.endswith("호기봇") for n in names)
 
     # Second call same day must NOT create more (idempotent).
     client.get("/api/challenge/today")

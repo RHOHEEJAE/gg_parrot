@@ -22,9 +22,19 @@ from . import paper as paper_mod
 from .db import DailyChallenge, get_session
 from .engine import Macro, human_summary
 
-AI_NAME = "GGparrot_AI"
+# Each bot gets its own numbered name (껄무새1호기봇, 껄무새2호기봇, …) so the
+# board reads as several competitors rather than one repeated entry.
+AI_NAME_PREFIX = "껄무새"
+AI_NAME_SUFFIX = "호기봇"
+AI_NAME = "껄무새봇"  # family name, for the UI banner / API summary
+
 _KST = timezone(timedelta(hours=9))
 _lock = asyncio.Lock()
+
+
+def bot_name(index: int) -> str:
+    """Display name of the ``index``-th (1-based) bot of the day."""
+    return f"{AI_NAME_PREFIX}{index}{AI_NAME_SUFFIX}"
 
 
 def _today_kst() -> str:
@@ -67,9 +77,11 @@ async def ensure_today() -> None:
                 info = await paper_mod.start_session(macro, macro.symbol, "live")
             except Exception:
                 continue  # skip a symbol/macro that can't start a paper session
+            # Number by entries actually created, so a skipped macro can't leave
+            # a gap (1·2·3 rather than 1·3).
             leaderboard_mod.create_entry(
                 user_id="ai",
-                username=AI_NAME,
+                username=bot_name(created + 1),
                 password_hash="",
                 owner_user_id=None,  # free/visible so users can learn from it
                 is_ai=True,
