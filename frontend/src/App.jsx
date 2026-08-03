@@ -14,6 +14,7 @@ import { api } from "./api.js";
 import { useAuth, clearAuth, updateAuthUser } from "./lib/auth.js";
 import SimBadge from "./components/SimBadge.jsx";
 import KimchiBanner from "./components/KimchiBanner.jsx";
+import FearGreedBanner from "./components/FearGreedBanner.jsx";
 import HangangTempBanner from "./components/HangangTempBanner.jsx";
 // [차후 도입] 고래 동향 배너 — 거래소/컨트랙트 지갑 노이즈 정리 후 켤 예정.
 // 컴포넌트와 백엔드(app/whales.py)는 그대로 두고 마운트만 꺼둡니다.
@@ -146,6 +147,7 @@ export default function App() {
     <div className="min-h-screen pb-16">
       <Nav />
       <KimchiBanner />
+      <FearGreedBanner />
       <HangangTempBanner />
       {/* [차후 도입] <WhaleBanner /> */}
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">

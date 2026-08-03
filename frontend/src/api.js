@@ -128,6 +128,9 @@ export const api = {
   // 한강 수온 (server-cached proxy of the public Hangang temperature API)
   hangangTemp: () => req("/api/hangang-temp"),
 
+  // 공포·탐욕 지수 (시장 전체 심리; 서버 캐시, Alternative.me 프록시)
+  fearGreed: () => req("/api/fear-greed"),
+
   // [차후 도입] '고래 동향' — 서버 라우트가 아직 꺼져 있어 지금 호출하면 404 입니다.
   whaleActivity: () => req("/api/whale-activity"),
 

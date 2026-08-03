@@ -29,6 +29,7 @@ except ImportError:
 
 from . import chart as chart_mod
 from . import chat as chat_mod
+from . import feargreed as feargreed_mod
 from . import hangang as hangang_mod
 from . import hotcoins as hotcoins_mod
 from . import kimchi as kimchi_mod
@@ -467,6 +468,17 @@ def hangang_temp() -> dict:
     cache or ok:false) so the page never breaks on an upstream failure.
     """
     return hangang_mod.get_temp()
+
+
+@app.get("/api/fear-greed")
+def fear_greed() -> dict:
+    """Crypto Fear & Greed index — MARKET-WIDE sentiment (reference only).
+
+    Server-cached proxy of Alternative.me. One 0~100 gauge for the whole crypto
+    market (BTC-centric), not per-coin; the UI labels it as such. Degrades to a
+    stale copy so the banner never breaks the page.
+    """
+    return feargreed_mod.get_fear_greed()
 
 
 @app.get("/api/candles")
