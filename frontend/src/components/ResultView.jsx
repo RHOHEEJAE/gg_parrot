@@ -16,7 +16,7 @@ const MOOD_ACCENT = {
 };
 
 // 껄무새 AI 원인 분석 카드. 규칙기반 장문 멘트는 쓰지 않고, '분석하기'를 누르면
-// 서버(OpenAI)가 결과 원인을 5줄 이내로 간결하게 분석한다.
+// 서버(Anthropic)가 결과 원인을 5줄 이내로 간결하게 분석한다.
 function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
   const isAi = explanation && explanation.source === "ai";
 
@@ -60,7 +60,7 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
     );
   }
 
-  // 아직 AI 분석 전: 분석 버튼만. 서버 OpenAI 키로 동작(입력 불필요).
+  // 아직 AI 분석 전: 분석 버튼만. 서버 Anthropic 키로 동작(입력 불필요).
   return (
     <div className="rounded-2xl border border-slate-200 bg-surface p-5">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -72,7 +72,7 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
           type="button"
           onClick={onAiExplain}
           disabled={aiBusy}
-          className="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-5 py-2 text-sm font-bold text-white shadow-sm"
+          className="shrink-0 rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-5 py-2 text-sm font-bold text-brand-ink shadow-sm"
         >
           {aiBusy ? "분석 중…" : "✨ 분석하기"}
         </button>
@@ -82,15 +82,18 @@ function ParrotExplain({ explanation, onAiExplain, aiBusy, aiError }) {
   );
 }
 
+// table-row: 상자 대신 라벨/값 2열 + 괘선. 수치는 num(고정폭)이라 세로로 맞는다.
 function Stat({ label, value, term, color = "text-slate-900", title, sub }) {
   return (
-    <div className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3 min-w-0">
-      <div className="flex items-center text-xs text-slate-500">
+    <div className="flex items-baseline justify-between gap-4 py-3 border-b border-slate-200 last:border-0 min-w-0">
+      <div className="flex items-center text-[15px] font-medium text-slate-700 shrink-0">
         {label}
         {term && <InfoTooltip term={term} />}
       </div>
-      <div className={"text-2xl font-bold truncate " + color} title={title}>{value}</div>
-      {sub && <div className="text-xs text-slate-500 truncate" title={sub}>{sub}</div>}
+      <div className="min-w-0 text-right">
+        <div className={"text-[17px] font-bold truncate num " + color} title={title}>{value}</div>
+        {sub && <div className="text-xs text-slate-500 truncate" title={sub}>{sub}</div>}
+      </div>
     </div>
   );
 }
@@ -99,7 +102,7 @@ function PerSymbolTable({ rows }) {
   if (!rows || rows.length === 0) return null;
   const coin = (s) => (s || "").replace(/USDT$|BUSD$|USDC$/, "");
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
+    <div className="pt-2">
       <div className="text-sm font-semibold text-slate-700 mb-3">
         🧺 종목별 성과 (포트폴리오 · 자금 균등 분할)
       </div>
@@ -120,12 +123,12 @@ function PerSymbolTable({ rows }) {
               return (
                 <tr key={r.symbol} className="border-b border-slate-100 last:border-0">
                   <td className="py-1.5 font-medium text-slate-800">{coin(r.symbol)}</td>
-                  <td className={"text-right font-bold tabular-nums " + (up ? "text-green-600" : "text-red-600")}>
+                  <td className={"text-right font-bold num " + (up ? "text-green-600" : "text-red-600")}>
                     {up ? "+" : ""}{(r.final_return_pct ?? 0).toFixed(2)}%
                   </td>
-                  <td className="text-right tabular-nums text-red-600">-{(r.mdd_pct ?? 0).toFixed(1)}%</td>
-                  <td className="text-right tabular-nums text-slate-600">{(r.win_rate_pct ?? 0).toFixed(0)}%</td>
-                  <td className="text-right tabular-nums text-slate-600">{r.total_trades ?? 0}</td>
+                  <td className="text-right num text-red-600">-{(r.mdd_pct ?? 0).toFixed(1)}%</td>
+                  <td className="text-right num text-slate-600">{(r.win_rate_pct ?? 0).toFixed(0)}%</td>
+                  <td className="text-right num text-slate-600">{r.total_trades ?? 0}</td>
                 </tr>
               );
             })}
@@ -185,12 +188,12 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
         </div>
       )}
 
-      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
-        <div className="flex items-center text-sm text-slate-500 mb-1">
+      <div className="pt-1">
+        <div className="flex items-center text-sm font-medium text-slate-700 mb-1">
           백테스트 수익률 {periodLabel ? `· ${periodLabel}` : ""}
           <InfoTooltip term="backtest" />
         </div>
-        <div className={"text-4xl sm:text-5xl font-extrabold " + retColor}>
+        <div className={"text-4xl sm:text-5xl font-extrabold num " + retColor}>
           {sign}
           {r.final_return_pct.toFixed(2)}%
         </div>
@@ -198,7 +201,7 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
           <div className="mt-3 flex items-center flex-wrap gap-2 text-sm">
             <span className="text-slate-500">
               그냥 홀딩(HODL)했다면{" "}
-              <b className={bh >= 0 ? "text-green-600" : "text-red-600"}>
+              <b className={"num " + (bh >= 0 ? "text-green-600" : "text-red-600")}>
                 {bh >= 0 ? "+" : ""}{bh.toFixed(2)}%
               </b>
             </span>
@@ -217,7 +220,7 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="border-t border-slate-200">
         <Stat label="승률" term="win_rate" value={`${r.win_rate_pct.toFixed(1)}%`} />
         <Stat label="MDD (최대낙폭)" term="mdd" value={`-${r.mdd_pct.toFixed(1)}%`} color="text-red-600" />
         <Stat label="총 매매 횟수" value={r.total_trades} />
@@ -250,8 +253,8 @@ export default function ResultView({ result, perSymbol, explanation, onAiExplain
         aiError={aiError}
       />
 
-      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
-        <div className="text-sm text-slate-500 mb-3">자산곡선 (equity curve)</div>
+      <div className="pt-2">
+        <div className="text-sm font-medium text-slate-700 mb-3">자산곡선 (equity curve)</div>
         <EquityChart curve={r.equity_curve} />
       </div>
 

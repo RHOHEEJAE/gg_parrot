@@ -3,6 +3,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* --- fonts -------------------------------------------------------------
+   Pretendard: 토스가 자체 서체(TPS) 대체로 공식 권장하는 한글 서체.
+   앱이 실제로 쓰는 한글 695자 + 라틴을 0번 조각(157KB)에 담아 항상 받고,
+   나머지 완성형은 8조각으로 나눠 unicode-range 로 필요할 때만 받는다.
+   0번을 마지막에 선언해 겹치는 글자에서 우선하도록 한다.
+   JetBrains Mono: binance 가 BinancePlex 대체로 지정한 숫자용 서체(OFL). */
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-1.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+AC02-B18F;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-2.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+B190-B6F5;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-3.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+B6F6-BC80;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-4.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+BC81-C1E2;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-5.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+C1E3-C771;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-6.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+C772-CCDE;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-7.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+CCDF-D239;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-8.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+D23A-D7A2;
+}
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/Pretendard-0.woff2") format("woff2-variations");
+  font-weight: 45 930; font-style: normal; font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+2013-2014, U+2018-2019, U+201C-201D, U+2022, U+2026, U+2030, U+2032-2033, U+203B, U+20A9, U+20AC, U+2103, U+2190-2193, U+2212, U+2248, U+2260, U+2264-2265, U+25B2, U+25BC, U+25CB, U+25CF, U+3130-318F, U+AC00-AC01, U+AC04, U+AC08, U+AC10-AC12, U+AC15-AC16, U+AC19, U+AC1C-AC1D, U+AC31, U+AC70, U+AC74, U+AC78, U+AC80, U+AC83, U+AC8C, U+AC90, U+ACA0, U+ACA8-ACA9, U+ACAC, U+ACB0, U+ACB9, U+ACBC-ACBD, U+ACC4, U+ACE0-ACE1, U+ACE4, U+ACE7-ACE8, U+ACF3, U+ACF5, U+ACFC, U+AD00, U+AD04, U+AD1C, U+AD50, U+AD6C-AD6D, U+AD74, U+AD81, U+AD8C, U+ADC0, U+ADDC, U+ADE0, U+ADF8-ADF9, U+ADFC, U+AE00, U+AE08-AE09, U+AE0B, U+AE30, U+AE34, U+AE38, U+AE40, U+AE45, U+AE4A, U+AE4C, U+AE4E, U+AE54, U+AE68, U+AEBC, U+AEBE, U+AEC4, U+AECF, U+AED8, U+AF2C-AF2D, U+AF64, U+AFB8, U+AFBC, U+AFC0, U+AFC9, U+AFD4, U+AFE8, U+B00C, U+B010, U+B04C, U+B054-B055, U+B05D, U+B07C, U+B098-B099, U+B09C, U+B0A0, U+B0A8, U+B0AC, U+B0AE, U+B0B4, U+B0B8, U+B0BC, U+B0C5, U+B0C8, U+B0D0, U+B0E5, U+B108, U+B10C, U+B110, U+B113, U+B118, U+B123-B124, U+B137, U+B144, U+B150, U+B178, U+B180, U+B18D, U+B192-B193, U+B1CC, U+B204, U+B208, U+B20C, U+B220, U+B25C, U+B274, U+B290, U+B294, U+B298, U+B2A5, U+B2C8, U+B2D0, U+B2D8-B2D9, U+B2E4-B2E5, U+B2E8, U+B2EB-B2EC, U+B2F4-B2F5, U+B2F7, U+B2F9, U+B2FF-B300, U+B313, U+B354, U+B358, U+B35C, U+B36E, U+B370, U+B378, U+B3C4, U+B3C8, U+B3CC, U+B3D9, U+B3FC, U+B410, U+B418, U+B41C, U+B420, U+B428-B429, U+B450, U+B454, U+B458, U+B461, U+B46C, U+B4A4, U+B4DC, U+B4E0, U+B4E4, U+B4ED, U+B4F1, U+B514, U+B527, U+B529, U+B530-B531, U+B54C, U+B550, U+B560, U+B5A4, U+B5A8, U+B5BB-B5BC, U+B610, U+B69C, U+B6AB, U+B728, U+B73B, U+B760, U+B77C-B77D, U+B780, U+B78C, U+B790-B791, U+B798-B799, U+B79C, U+B7B5, U+B7C9, U+B7EC, U+B7F0, U+B7F4, U+B7FC, U+B801, U+B807-B808, U+B80C, U+B824-B825, U+B828, U+B82C, U+B835, U+B837-B838, U+B85C-B85D, U+B860, U+B86C, U+B871, U+B8B0, U+B8CC, U+B8E8-B8E9, U+B8F0, U+B904, U+B958, U+B960, U+B974, U+B978, U+B97C, U+B984-B985, U+B9AC-B9AD, U+B9B0, U+B9B4, U+B9BC-B9BD, U+B9C1, U+B9C8-B9C9, U+B9CC, U+B9CE, U+B9D0, U+B9DD-B9DE, U+B9E1, U+B9E4-B9E5, U+B9E8, U+B9F5, U+BA38-BA39, U+BA3C, U+BA40, U+BA48, U+BA54, U+BA58, U+BA70, U+BA74, U+BA85, U+BA87, U+BAA8-BAA9, U+BAB0, U+BAB8, U+BABB, U+BB34, U+BB36, U+BB38, U+BB3B-BB3C, U+BB50, U+BB58, U+BBA4, U+BBAC, U+BBC0, U+BBF8, U+BBFC, U+BBFF-BC00, U+BC08, U+BC0B, U+BC0D, U+BC11, U+BC14-BC15, U+BC18, U+BC1B-BC1C, U+BC29, U+BC30-BC31, U+BC34, U+BC84, U+BC88, U+BC8C, U+BC94-BC95, U+BC97, U+BCA0, U+BCA4, U+BCA8, U+BCC0, U+BCC4, U+BCF4-BCF5, U+BCF8, U+BCFC, U+BD05, U+BD07, U+BD09, U+BD10, U+BD80, U+BD84, U+BD88, U+BD99, U+BE0C, U+BE14, U+BE44, U+BE48, U+BE4C, U+BE57, U+BE5A-BE5B, U+BE60-BE61, U+BE68, U+BF51, U+BFD0, U+C05C, U+C0AC-C0AD, U+C0B0, U+C0B4, U+C0BC, U+C0C0-C0C1, U+C0C8-C0C9, U+C0CC, U+C0DD, U+C0E4, U+C0F7, U+C11C-C11E, U+C120, U+C124, U+C130-C131, U+C138-C139, U+C13C, U+C140, U+C158, U+C168, U+C18C-C18D, U+C190, U+C194, U+C1A1, U+C20F, U+C218, U+C21C, U+C228, U+C22B, U+C26C, U+C27C-C27D, U+C288, U+C2A4, U+C2A8, U+C2AC, U+C2B5, U+C2B7, U+C2B9, U+C2DC-C2DD, U+C2E0, U+C2E3-C2E4, U+C2EB-C2EC, U+C2F1, U+C2F6, U+C2F8-C2F9, U+C2FC, U+C300, U+C30D, U+C313, U+C368-C369, U+C36C, U+C378, U+C37C, U+C3D8, U+C4F0, U+C4F4, U+C4F8, U+C501, U+C529, U+C52C, U+C544-C545, U+C548, U+C54A, U+C54C, U+C554, U+C558-C559, U+C55E, U+C561, U+C571, U+C575, U+C57C-C57D, U+C591, U+C5B4-C5B5, U+C5B8, U+C5BC, U+C5C4-C5C6, U+C5C8, U+C5D0-C5D1, U+C5D4, U+C5EC-C5ED, U+C5F0, U+C5F4, U+C5FC, U+C600-C601, U+C606, U+C608, U+C624, U+C628, U+C62C, U+C62E, U+C635, U+C640, U+C644, U+C651, U+C654-C655, U+C65C, U+C678, U+C694-C695, U+C6A9, U+C6B0, U+C6B4, U+C6B8, U+C6C0-C6C1, U+C6C3, U+C6CC, U+C6D0, U+C6D4, U+C704, U+C70C, U+C720-C721, U+C728, U+C735, U+C73C, U+C740, U+C744, U+C74C, U+C751, U+C758, U+C774-C775, U+C778, U+C77C-C77D, U+C783-C785, U+C788, U+C78A, U+C790-C791, U+C794, U+C798, U+C7A0-C7A1, U+C7A5-C7A6, U+C7AC, U+C7C1, U+C800-C801, U+C804, U+C808, U+C810-C811, U+C815, U+C81C-C81D, U+C838, U+C84C, U+C870-C871, U+C874, U+C880-C881, U+C885, U+C88B-C88C, U+C8FC, U+C900, U+C904, U+C911, U+C918, U+C988-C989, U+C998, U+C99D, U+C9C0-C9C1, U+C9C4, U+C9C8, U+C9D0-C9D1, U+C9DA, U+C9DC-C9DD, U+C9E0, U+C9E7, U+C9F8, U+CABD, U+CC0D, U+CC28, U+CC2E, U+CC38, U+CC3D-CC3E, U+CC44-CC45, U+CC4C, U+CC59, U+CC98, U+CC9C, U+CCA8-CCA9, U+CCAB, U+CCAD, U+CCB4, U+CCD0, U+CD08, U+CD18, U+CD1D, U+CD5C, U+CD94-CD95, U+CD98, U+CD9C, U+CDA9, U+CDB0, U+CDE8, U+CE21, U+CE35, U+CE58-CE59, U+CE60, U+CE69, U+CE74, U+CE78, U+CE90, U+CE94, U+CEE4, U+CEE8, U+CEF4, U+CF00, U+CF1C, U+CF24, U+CF54, U+CF58, U+CF5C, U+CFE8, U+CFFC, U+D034, U+D06C, U+D070, U+D074, U+D07C-D07D, U+D0A4, U+D0B9, U+D0C0-D0C1, U+D0C8, U+D0D0-D0D1, U+D0DC-D0DD, U+D0ED, U+D130, U+D134, U+D138, U+D14C-D14D, U+D154, U+D15C, U+D168, U+D1A0, U+D1B5, U+D1F4, U+D22C, U+D234, U+D280, U+D2B8-D2B9, U+D2BC, U+D2C0, U+D2F0, U+D2F4, U+D301, U+D305, U+D30C, U+D310, U+D314, U+D320, U+D328-D329, U+D338, U+D37C, U+D380, U+D398, U+D39C, U+D3B8, U+D3BC, U+D3C9, U+D3D0, U+D3EC-D3ED, U+D3F4, U+D3FC, U+D45C, U+D480, U+D488, U+D4E8, U+D504, U+D50C, U+D53C, U+D544, U+D551, U+D558-D559, U+D55C, U+D560, U+D568-D569, U+D56D, U+D574-D575, U+D588-D589, U+D5A5, U+D5C8, U+D5D8, U+D5E4, U+D5F7, U+D600, U+D604, U+D614-D615, U+D638, U+D640, U+D654-D655, U+D658, U+D65C, U+D669, U+D68C, U+D69F, U+D6A1, U+D6A8, U+D6C4, U+D6E8, U+D720, U+D729, U+D750, U+D754, U+D765, U+D788, U+D790, U+D798, U+D7A3;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono-subset.woff2") format("woff2-variations");
+  font-weight: 100 800; font-style: normal; font-display: swap;
+}
+
 /* --- theme palette -----------------------------------------------------
    Values are bare `R G B` triplets so Tailwind can apply opacity modifiers
    (see tailwind.config.js). Swapping these under `.dark` re-themes every
@@ -11,17 +77,21 @@
   :root {
     --c-surface: 255 255 255;
 
-    --c-slate-50: 248 250 252;
-    --c-slate-100: 241 245 249;
-    --c-slate-200: 226 232 240;
-    --c-slate-300: 203 213 225;
-    --c-slate-400: 148 163 184;
-    --c-slate-500: 100 116 139;
-    --c-slate-600: 71 85 105;
-    --c-slate-700: 51 65 85;
-    --c-slate-800: 30 41 59;
-    --c-slate-900: 15 23 42;
+    /* 중성색 = 토스 grey 계열(OKLCH→hex 변환). 순수 회색이 아니라 차가운
+       navy 기운이 돌아 흰 화면이 누렇게 뜨지 않는다. 텍스트 단계는
+       "작을수록 대비를 높인다" 규칙에 따라 500(흐린 글자·98곳)을 크게 올렸다. */
+    --c-slate-50: 246 248 250;   /* #f6f8fa 페이지 바닥 */
+    --c-slate-100: 238 241 244;  /* #eef1f4 면 */
+    --c-slate-200: 222 227 231;  /* #dee3e7 괘선 */
+    --c-slate-300: 197 203 210;  /* #c5cbd2 강한 테두리 */
+    --c-slate-400: 106 116 128;  /* #6a7480  4.7:1 장식 전용 */
+    --c-slate-500: 75 87 101;    /* #4b5765  7.4:1 흐린 글자 */
+    --c-slate-600: 61 72 85;     /* #3d4855  9.4:1 */
+    --c-slate-700: 45 58 72;     /* #2d3a48 11.6:1 작은 글씨 */
+    --c-slate-800: 32 43 56;     /* #202b38 14.0:1 */
+    --c-slate-900: 20 31 44;     /* #141f2c 16.6:1 제목 */
 
+    /* 포인트(🪙)·부차 강조. 노랑이 CTA를 맡으면서 앰버에서 이리로 옮겨왔다. */
     --c-indigo-50: 238 242 255;
     --c-indigo-100: 224 231 255;
     --c-indigo-200: 199 210 254;
@@ -33,33 +103,38 @@
     --c-indigo-800: 55 48 163;
     --c-indigo-900: 49 46 129;
 
+    /* 브랜드 = binance 옐로. 그 위 글자는 항상 --c-brand-ink (12.2:1).
+       라이트에서 노랑은 채움 전용 — 흰 배경 위 노란 글자는 1.4:1 이다. */
+    --c-brand: 252 213 53;
+    --c-brand-hover: 255 224 102;
+    --c-brand-ink: 24 26 32;
+    --c-brand-line: 201 163 0;   /* 흰 배경에서 보이는 포커스 테두리 */
+
     --c-red-50: 254 242 242;
     --c-red-100: 254 226 226;
     --c-red-300: 252 165 165;
-    --c-red-400: 248 113 113;
-    --c-red-500: 239 68 68;
-    --c-red-600: 220 38 38;
-    --c-red-700: 185 28 28;
-    --c-red-800: 153 27 27;
+    --c-red-400: 232 120 133;
+    --c-red-500: 214 60 80;
+    --c-red-600: 200 30 51;      /* #c81e33 하락 5.7:1 */
+    --c-red-700: 168 24 42;
+    --c-red-800: 138 20 35;
 
-    /* Solid danger buttons (white label). Split from red-600 so dark mode can
-       keep loss/error TEXT light while the button fill stays dark. */
-    --c-danger: 220 38 38;
-    --c-danger-hover: 239 68 68;
+    --c-danger: 200 30 51;
+    --c-danger-hover: 168 24 42;
 
-    --c-green-50: 240 253 244;
-    --c-green-300: 134 239 172;
-    --c-green-600: 22 163 74;
-    --c-green-700: 21 128 61;
+    --c-green-50: 236 250 242;
+    --c-green-300: 122 200 160;
+    --c-green-600: 0 119 56;     /* #007738 상승 5.7:1 — 하락과 명도를 맞춤 */
+    --c-green-700: 0 95 45;
 
     --c-amber-50: 255 251 235;
     --c-amber-100: 254 243 199;
     --c-amber-200: 253 230 138;
     --c-amber-300: 252 211 77;
-    --c-amber-500: 245 158 11;
-    --c-amber-600: 217 119 6;
-    --c-amber-700: 180 83 9;
-    --c-amber-800: 146 64 14;
+    --c-amber-500: 181 130 8;
+    --c-amber-600: 156 110 6;
+    --c-amber-700: 124 82 5;
+    --c-amber-800: 107 82 5;
 
     --c-blue-50: 239 246 255;
     --c-blue-300: 147 197 253;
@@ -80,12 +155,12 @@
 
     /* SVG charts build elements programmatically and can't use Tailwind
        classes for stroke/fill, so they read these variables directly. */
-    --chart-grid: 226 232 240;
-    --chart-axis: 148 163 184;
+    --chart-grid: 222 227 231;
+    --chart-axis: 106 116 128;
     --chart-crosshair: 100 116 139;
     --chart-crosshair-tag: 71 85 105;
-    --chart-up: 22 163 74;
-    --chart-down: 220 38 38;
+    --chart-up: 0 119 56;
+    --chart-down: 200 30 51;
 
     /* Optimizer heat-map swatches (red→green). The cell label is slate-800,
        so the swatch must sit opposite it in each theme. */
@@ -94,62 +169,62 @@
   }
 
   .dark {
-    /* Surfaces sit slightly above the page background so cards read as raised. */
-    --c-surface: 22 30 46;
+    --c-surface: 21 26 32;       /* #151a20 살짝 떠 있는 면 */
 
-    /* slate inverts: 50 is the page background, 900 is primary text. */
-    --c-slate-50: 12 17 28;
-    --c-slate-100: 30 41 59;
-    --c-slate-200: 45 58 79;
-    --c-slate-300: 61 78 102;
-    --c-slate-400: 125 139 159;
-    --c-slate-500: 156 170 189;
-    --c-slate-600: 190 202 217;
-    --c-slate-700: 214 223 235;
-    --c-slate-800: 233 239 246;
-    --c-slate-900: 245 249 255;
+    /* 표면 = binance 3단(캔버스/카드/한단계위). 괘선은 카드와 같은 색을 써서
+       "테두리가 잉크 선이 아니라 표면의 한 단계처럼" 읽히게 한다.
+       텍스트는 작을수록 밝게 — 500(흐린 글자)이 600·700보다 밝은 이유. */
+    --c-slate-50: 11 14 17;      /* #0b0e11 캔버스 */
+    --c-slate-100: 30 35 41;     /* #1e2329 면 */
+    --c-slate-200: 43 49 57;     /* #2b3139 괘선 */
+    --c-slate-300: 58 66 78;     /* #3a424e 강한 테두리 */
+    --c-slate-400: 154 164 178;  /* #9aa4b2  7.7:1 장식 전용 */
+    --c-slate-500: 201 207 216;  /* #c9cfd8 12.3:1 흐린 글자 — 작으니 더 밝게 */
+    --c-slate-600: 183 190 201;  /* #b7bec9 10.3:1 본문 */
+    --c-slate-700: 201 207 216;  /* #c9cfd8 12.3:1 작은 글씨 */
+    --c-slate-800: 221 225 231;  /* #dde1e7 */
+    --c-slate-900: 234 236 239;  /* #eaecef 16.4:1 제목 */
 
-    /* Accents: tints (50-200) go dark, borders (300-400) mid, fills (500-600)
-       stay saturated so white button text still reads, text steps (700-800)
-       go light because they sit on the now-dark tints. */
     --c-indigo-50: 33 33 78;
     --c-indigo-100: 46 44 104;
     --c-indigo-200: 62 60 133;
     --c-indigo-300: 92 90 172;
-    --c-indigo-400: 129 140 248;
-    --c-indigo-500: 92 96 236; /* hover fill; still readable under white text */
+    --c-indigo-400: 150 158 250;
+    --c-indigo-500: 92 96 236;
     --c-indigo-600: 79 74 220;
-    /* text steps go light so they read on the now-dark indigo tints (50-200). */
-    --c-indigo-700: 178 184 253;
-    --c-indigo-800: 199 210 254;
-    --c-indigo-900: 224 231 255;
+    --c-indigo-700: 182 189 253;
+    --c-indigo-800: 205 214 254;
+    --c-indigo-900: 228 233 255;
+
+    /* 노랑은 다크에서 채움과 잉크 양쪽으로 쓴다. */
+    --c-brand: 252 213 53;
+    --c-brand-hover: 255 224 102;
+    --c-brand-ink: 24 26 32;
+    --c-brand-line: 252 213 53;
 
     --c-red-50: 74 25 27;
     --c-red-100: 97 31 34;
     --c-red-300: 152 55 58;
-    --c-red-400: 196 74 74;
-    --c-red-500: 244 87 87;
-    /* Mostly `text-red-600` (23 uses: losses/errors), so it must stay LIGHT
-       here. Solid danger buttons use --c-danger instead — the two needs are
-       mutually exclusive against a dark surface. */
-    --c-red-600: 240 82 82;
-    --c-red-700: 252 165 165;
-    --c-red-800: 254 202 202;
+    --c-red-400: 214 92 108;
+    --c-red-500: 246 70 93;
+    --c-red-600: 246 70 93;      /* #f6465d 하락 */
+    --c-red-700: 255 143 159;
+    --c-red-800: 255 190 200;
 
     --c-danger: 198 32 32;
     --c-danger-hover: 176 26 26;
 
-    --c-green-50: 20 61 37;
-    --c-green-300: 61 133 88;
-    --c-green-600: 34 180 84;
-    --c-green-700: 134 239 172;
+    --c-green-50: 16 56 40;
+    --c-green-300: 58 138 104;
+    --c-green-600: 14 203 129;   /* #0ecb81 상승 */
+    --c-green-700: 122 232 186;
 
     --c-amber-50: 72 47 12;
     --c-amber-100: 95 62 15;
     --c-amber-200: 124 82 22;
     --c-amber-300: 161 108 30;
     --c-amber-500: 201 110 10;
-    --c-amber-600: 180 95 10; /* white-on-amber is the weakest pairing; AA-tuned */
+    --c-amber-600: 180 95 10;
     --c-amber-700: 252 211 77;
     --c-amber-800: 253 230 138;
 
@@ -170,12 +245,12 @@
     --c-sky-700: 125 211 252;
     --c-sky-800: 186 230 253;
 
-    --chart-grid: 45 58 79;
-    --chart-axis: 125 139 159;
+    --chart-grid: 43 49 57;
+    --chart-axis: 154 164 178;
     --chart-crosshair: 156 170 189;
     --chart-crosshair-tag: 100 116 139;
-    --chart-up: 34 197 94;
-    --chart-down: 248 90 90;
+    --chart-up: 14 203 129;
+    --chart-down: 246 70 93;
 
     --heat-s: 42%;
     --heat-l: 26%;
@@ -184,8 +259,28 @@
 
 body {
   @apply bg-slate-50 text-slate-900;
-  font-family: system-ui, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-family: "Pretendard", system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* 수치 전용. binance 가 본문(Nova)과 숫자(Plex)를 서체째로 가르는 규칙을
+   오픈소스 서체로 옮긴 것. tabular 라 자릿수가 세로로 맞는다. */
+.num {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 제목은 자간을 조여 덩어리로 읽히게 한다 — 토스 램프가 제목에만
+   강한 음수 자간을 주는 이유. 본문은 풀어서 한 글자씩 읽히게 둔다. */
+h1, h2, h3, h4 { letter-spacing: -0.02em; }
+
+/* 13px 이하에 weight 400 을 쓰지 않는다. 어두운 바닥에서 가는 획이
+   번져 보여 수치상 통과하는 대비도 실제로는 흐리게 느껴진다. */
+.text-xs { font-weight: 500; }
 
 /* Native controls (checkboxes, date inputs, select arrows, scrollbars) follow
    the OS light/dark rendering; without this they stay white-on-white in dark. */

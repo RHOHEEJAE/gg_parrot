@@ -110,28 +110,28 @@ export default function Leaderboard() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold">🏆 오늘의 리더보드</h2>
+        <h2 className="text-2xl font-bold text-slate-900">🏆 오늘의 리더보드</h2>
         <SimBadge />
       </div>
 
       {/* countdown + register */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-surface border border-slate-200 px-5 py-4">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 pb-4 border-b border-slate-200">
         <div className="text-sm text-slate-700">
           리더보드 초기화까지{" "}
-          <span className="font-bold tabular-nums text-amber-700">{fmtCountdown(remain)}</span>{" "}
+          <span className="font-bold num text-amber-700">{fmtCountdown(remain)}</span>{" "}
           <span className="text-slate-500">남음 (매일 KST 00:00 초기화)</span>
         </div>
         <button
           onClick={() => setModal({})}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-lg bg-brand hover:bg-brand-hover px-4 py-2 text-sm font-semibold text-brand-ink"
         >
           + 나만의 매크로 등록
         </button>
       </div>
 
       {challenge?.active && challenge.symbol && (
-        <div className="mb-4 rounded-2xl bg-indigo-600 px-5 py-4 shadow">
-          <div className="text-sm text-white">
+        <div className="mb-4 border-l-2 border-brand pl-4 py-1">
+          <div className="text-sm text-slate-700">
             🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요. 나만의 매크로를 등록해 수익률을 경쟁해 보아요.
           </div>
         </div>
@@ -149,18 +149,23 @@ export default function Leaderboard() {
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* board-row: 카드 대신 캔버스 위 괘선 리스트. 순위+아바타+이름/설명 스택,
+          1위만 아바타를 브랜드색으로 채우고 순위 숫자를 강조색으로 뒤집는다. */}
+      <div>
         {items.map((e, idx) => {
           const r = ret(e);
+          const first = idx === 0;
+          const initial = (e.username || e.nickname || "?").charAt(0);
           return (
-            <div key={e.id} className="rounded-2xl bg-surface border border-slate-200 p-3 sm:p-4 flex items-center gap-2 sm:gap-4 flex-wrap">
-              <div className="w-6 sm:w-8 shrink-0 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
+            <div key={e.id} className="py-3.5 sm:py-4 border-b border-slate-200 last:border-0 flex items-center gap-2.5 sm:gap-4 flex-wrap">
+              <div className={"w-6 shrink-0 text-center text-lg font-bold num " + (first ? "text-slate-900" : "text-slate-600")}>{idx + 1}</div>
+              <div className={"w-9 h-9 shrink-0 rounded-full grid place-items-center text-[15px] font-bold " + (first ? "bg-brand text-brand-ink" : "bg-slate-100 text-slate-700")}>{initial}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                   {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
                   {/* AI bots carry their own numbered name (껄무새1호기봇 …) — use
                       the stored username rather than a hardcoded label. */}
-                  <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
+                  <span className="text-[17px] font-bold tracking-tight text-slate-900 truncate">{e.username || e.nickname}</span>
                   {e.is_ai && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold">🤖 AI</span>}
                   {(e.is_owner || e.is_mine) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">내 것</span>}
                   {e.macro?.leverage > 1 && (
@@ -171,13 +176,13 @@ export default function Leaderboard() {
                   <span className="text-xs text-slate-500">· 오늘 {e.created_kst} 등록</span>
                 </div>
                 {e.locked ? (
-                  <div className="text-sm text-slate-400 truncate">🔒 잠김 — 언락하면 전략·매크로가 공개돼요</div>
+                  <div className="mt-0.5 text-sm font-medium text-slate-500 truncate">🔒 잠김 — 언락하면 전략·매크로가 공개돼요</div>
                 ) : (
-                  <div className="text-sm text-slate-700 truncate">{e.human_summary}</div>
+                  <div className="mt-0.5 text-sm font-medium text-slate-700 truncate">{e.human_summary}</div>
                 )}
               </div>
 
-              <div className={"w-20 sm:w-24 shrink-0 text-right text-lg sm:text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
+              <div className={"w-20 sm:w-24 shrink-0 text-right text-lg sm:text-xl font-bold num " + r.cls}>{r.text}</div>
 
               {/* Five action buttons never fit beside the summary on a phone —
                   give them their own full-width row below it. */}
@@ -200,7 +205,7 @@ export default function Leaderboard() {
                   <button
                     onClick={() => unlock(e)}
                     disabled={unlocking === e.id}
-                    className="px-3 py-1 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white"
+                    className="px-3 py-1.5 rounded-lg text-sm font-bold bg-brand hover:bg-brand-hover disabled:opacity-40 text-brand-ink"
                     title="포인트를 써서 매크로 공개+복사 (창작자에게 70% 적립)"
                   >
                     {unlocking === e.id ? "여는 중…" : `🔓 ${e.unlock_price}P`}

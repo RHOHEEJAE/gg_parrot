@@ -38,9 +38,10 @@ function Field({ label, term, children, hint }) {
   );
 }
 
+// text-field 규격: 48px 높이 · radius 12 · 면 배경, 포커스 시 캔버스 배경 + 브랜드 테두리.
 const inputCls =
-  "w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-slate-900 " +
-  "focus:outline-none focus:ring-2 focus:ring-blue-500";
+  "w-full h-12 rounded-xl bg-slate-100 border border-transparent px-4 text-slate-900 " +
+  "focus:outline-none focus:bg-surface focus:border-brand-line focus:ring-1 focus:ring-brand-line";
 
 export default function Builder({ form, setForm }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });

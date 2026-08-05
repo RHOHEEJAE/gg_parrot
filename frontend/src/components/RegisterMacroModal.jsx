@@ -86,7 +86,7 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
               </div>
               <button
                 onClick={() => navigate("/login")}
-                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-sm font-bold text-white"
+                className="rounded-lg bg-brand hover:bg-brand-hover px-5 py-2 text-sm font-bold text-brand-ink"
               >
                 로그인 / 회원가입
               </button>
@@ -133,7 +133,7 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
             {needsLogin ? "닫기" : "취소"}
           </button>
           {!needsLogin && (
-            <button onClick={save} disabled={busy || !!valErr} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 font-semibold disabled:opacity-40 text-white">
+            <button onClick={save} disabled={busy || !!valErr} className="rounded-lg bg-brand hover:bg-brand-hover px-5 py-2.5 font-semibold disabled:opacity-40 text-brand-ink">
               {busy ? "처리 중…" : isEdit ? "수정 저장" : "저장 & 등록"}
             </button>
           )}

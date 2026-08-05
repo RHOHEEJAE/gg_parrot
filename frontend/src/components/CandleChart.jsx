@@ -49,7 +49,7 @@ function BarReadout({ bar, quote }) {
   const cell = (label, v) => (
     <span className="whitespace-nowrap">
       <span className="text-slate-400">{label}</span>{" "}
-      <span className="tabular-nums text-slate-700">{fmtPrice(v)}</span>
+      <span className="num text-slate-700">{fmtPrice(v)}</span>
     </span>
   );
   return (
@@ -59,7 +59,7 @@ function BarReadout({ bar, quote }) {
       {cell("고", bar.h)}
       {cell("저", bar.l)}
       {cell("종", bar.c)}
-      <span className={"font-bold tabular-nums " + (rise ? "text-green-600" : "text-red-600")}>
+      <span className={"font-bold num " + (rise ? "text-green-600" : "text-red-600")}>
         {rise ? "+" : ""}
         {pct.toFixed(2)}%
       </span>
@@ -333,9 +333,9 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
           <h3 className="font-semibold">📈 {symbol}</h3>
           {last && (
             <>
-              <span className="text-lg font-bold tabular-nums">{fmtPrice(last.c)}</span>
+              <span className="text-lg font-bold num">{fmtPrice(last.c)}</span>
               <span className="text-xs text-slate-500">{quote}</span>
-              <span className={"text-sm font-semibold tabular-nums " + (up ? "text-green-600" : "text-red-600")}>
+              <span className={"text-sm font-semibold num " + (up ? "text-green-600" : "text-red-600")}>
                 {up ? "+" : ""}
                 {changePct.toFixed(2)}%
               </span>
@@ -353,12 +353,12 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
           <button onClick={() => applyZoom(zoom * 1.35)} disabled={zoom >= maxZoom} className={btn} title="축소 (더 많은 봉)">
             −
           </button>
-          <span className="text-xs text-slate-500 tabular-nums w-14 text-center">{Math.min(zoom, total)}봉</span>
+          <span className="text-xs text-slate-500 num w-14 text-center">{Math.min(zoom, total)}봉</span>
           <button onClick={() => applyZoom(zoom * 0.7)} disabled={zoom <= MIN_ZOOM} className={btn} title="확대 (봉 자세히)">
             +
           </button>
           {!live && (
-            <button onClick={() => setAnchor(null)} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-2 py-1 text-xs font-semibold text-white" title="최신 봉으로 이동">
+            <button onClick={() => setAnchor(null)} className="rounded-lg bg-brand hover:bg-brand-hover px-2 py-1 text-xs font-semibold text-brand-ink" title="최신 봉으로 이동">
               최신
             </button>
           )}

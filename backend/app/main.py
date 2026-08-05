@@ -355,7 +355,7 @@ _AI_EXPLAIN_CACHE_MAX = 500
 
 @app.post("/api/explain/ai")
 def explain_ai(req: ExplainAiRequest) -> dict:
-    """On-demand AI 원인 분석 using the server OpenAI key. Always returns a valid
+    """On-demand AI 원인 분석 using the server Anthropic key. Always returns a valid
     ``explanation``: on any AI failure it falls back to the rule-based one (same
     schema) and reports ``ai_error`` so the UI can hint why."""
     macro = req.macro

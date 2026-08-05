@@ -94,7 +94,7 @@ function Composer({ onCreated, onCancel }) {
         <button
           onClick={submit}
           disabled={busy}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-5 py-2 text-sm font-bold text-white"
+          className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-5 py-2 text-sm font-bold text-brand-ink"
         >
           {busy ? "등록 중…" : "등록"}
         </button>
@@ -122,7 +122,7 @@ function Pager({ page, pages, onGo }) {
         <button
           key={n}
           onClick={() => onGo(n)}
-          className={btn + (n === page ? "border-indigo-600 bg-indigo-600 text-white font-semibold" : "border-slate-300 hover:bg-slate-100")}
+          className={btn + (n === page ? "border-brand bg-brand text-brand-ink font-semibold" : "border-slate-300 hover:bg-slate-100")}
         >
           {n}
         </button>
@@ -173,7 +173,7 @@ export default function Board() {
         {token ? (
           <button
             onClick={() => setComposing((v) => !v)}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-bold text-white"
+            className="rounded-lg bg-brand hover:bg-brand-hover px-4 py-2 text-sm font-bold text-brand-ink"
           >
             {composing ? "닫기" : "✍️ 새 글 쓰기"}
           </button>
@@ -210,7 +210,7 @@ export default function Board() {
               아직 글이 없어요. 첫 글을 남겨보세요!
             </div>
           ) : (
-            <ul className="divide-y divide-slate-100 rounded-2xl bg-surface border border-slate-200">
+            <ul className="divide-y divide-slate-200 border-t border-slate-200">
               {data.items.map((p) => (
                 <li key={p.id}>
                   <Link to={`/board/${p.id}`} className="block px-5 py-4 hover:bg-slate-50">

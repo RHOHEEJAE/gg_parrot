@@ -67,7 +67,7 @@ export default function KimchiBanner() {
         {loading && !data && <span className="text-slate-500">불러오는 중…</span>}
 
         {premium != null && (
-          <span className={`font-bold tabular-nums ${color}`}>
+          <span className={`font-bold num ${color}`}>
             {isKimp ? "+" : ""}
             {premium.toFixed(2)}% <span className="text-xs font-medium">({label})</span>
           </span>

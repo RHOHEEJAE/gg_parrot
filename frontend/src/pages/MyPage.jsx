@@ -14,9 +14,9 @@ const REASON_KO = {
 
 function Section({ title, count, children }) {
   return (
-    <section className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
+    <section className="pt-5 border-t border-slate-200">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="font-semibold text-slate-800">{title}</h3>
+        <h3 className="text-[17px] font-bold tracking-tight text-slate-900">{title}</h3>
         {count != null && <span className="text-xs text-slate-400">({count})</span>}
       </div>
       {children}
@@ -56,7 +56,7 @@ export default function MyPage() {
   return (
     <div className="space-y-6">
       {/* profile + tier + points */}
-      <div className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6 flex items-center justify-between flex-wrap gap-4">
+      <div className="pb-5 flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-2xl">{tier.icon}</span>
@@ -86,9 +86,9 @@ export default function MyPage() {
           ["판매 수익", P(totals.earned)],
           ["구매한 매크로", totals.purchased + "개"],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-slate-100 border border-slate-300 px-4 py-3">
-            <div className="text-xs text-slate-500">{label}</div>
-            <div className="text-xl font-bold text-slate-900">{value}</div>
+          <div key={label} className="min-w-0">
+            <div className="text-[13px] font-semibold text-slate-700">{label}</div>
+            <div className="text-xl font-bold num text-slate-900">{value}</div>
           </div>
         ))}
       </div>
@@ -105,7 +105,7 @@ export default function MyPage() {
                   <div className="font-medium text-slate-800">{m.symbol}</div>
                   <div className="text-xs text-slate-500 truncate">{m.human_summary}</div>
                 </div>
-                <div className="text-sm text-slate-600 tabular-nums">
+                <div className="text-sm text-slate-600 num">
                   판매 <b>{m.sales}</b> · 수익 <b className="text-amber-700">{P(m.earned)}</b>
                   <span className="text-xs text-slate-400"> · {m.created_kst}</span>
                 </div>
@@ -155,7 +155,7 @@ export default function MyPage() {
                   <div className="text-xs text-slate-500 truncate">{m.human_summary}</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-500 tabular-nums">-{P(m.price)}</span>
+                  <span className="text-sm text-slate-500 num">-{P(m.price)}</span>
                   <button
                     onClick={() => navigate("/builder", { state: { macro: m.macro } })}
                     className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
@@ -180,7 +180,7 @@ export default function MyPage() {
                 <div className="text-slate-700">
                   <b>@{s.buyer}</b> 님이 <b>{s.symbol}</b> 매크로를 언락
                 </div>
-                <div className="text-amber-700 font-semibold tabular-nums">+{P(s.earned)}</div>
+                <div className="text-amber-700 font-semibold num">+{P(s.earned)}</div>
               </div>
             ))}
           </div>
@@ -196,7 +196,7 @@ export default function MyPage() {
             {ledger.map((l, i) => (
               <div key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <div className="text-slate-600">{REASON_KO[l.reason] || l.reason}</div>
-                <div className="flex items-center gap-3 tabular-nums">
+                <div className="flex items-center gap-3 num">
                   <span className={l.delta >= 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
                     {l.delta >= 0 ? "+" : ""}{l.delta.toLocaleString()}P
                   </span>

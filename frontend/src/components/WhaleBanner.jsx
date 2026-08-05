@@ -32,9 +32,9 @@ function CoinChip({ c, onPick }) {
       className="flex items-center gap-1.5 rounded-full border border-cyan-200 bg-surface/70 px-2.5 py-0.5 hover:bg-surface transition-colors"
     >
       <span className="font-semibold text-slate-700">{c.name}</span>
-      <span className="text-green-600 tabular-nums">▲{c.buys}</span>
-      <span className="text-red-600 tabular-nums">▼{c.sells}</span>
-      <span className={"font-bold tabular-nums " + netCls(c.net)}>
+      <span className="text-green-600 num">▲{c.buys}</span>
+      <span className="text-red-600 num">▼{c.sells}</span>
+      <span className={"font-bold num " + netCls(c.net)}>
         {c.net > 0 ? "+" : ""}
         {c.net}
       </span>

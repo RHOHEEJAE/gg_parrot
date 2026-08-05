@@ -146,7 +146,7 @@ export default function OptimizePanel({ form, setForm, valErr }) {
         <button
           onClick={run}
           disabled={busy || !!valErr}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2 text-sm font-semibold text-brand-ink"
         >
           {busy ? "최적화 중…" : data ? "다시 최적화" : "최적화 실행"}
         </button>

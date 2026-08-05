@@ -1,4 +1,4 @@
-"""Generate the daily challenge's macros (OpenAI, with a safe template fallback).
+"""Generate the daily challenge's macros (Anthropic, with a safe template fallback).
 
 The model proposes a few beginner-friendly macros for the chosen symbol; every
 proposal is validated against the real :class:`Macro` schema and anything invalid

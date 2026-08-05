@@ -776,7 +776,7 @@ export default function Guide() {
                 "w-full text-left rounded-lg text-sm " +
                 (s.sub ? "pl-6 pr-3 py-1.5 " : "px-3 py-2 ") +
                 (active && active.id === s.id
-                  ? "bg-indigo-600 text-white font-semibold"
+                  ? "bg-brand text-brand-ink font-semibold"
                   : s.sub
                   ? "text-slate-500 hover:bg-slate-100"
                   : "text-slate-600 hover:bg-slate-100 font-medium")
@@ -792,7 +792,7 @@ export default function Guide() {
       </aside>
 
       {/* content */}
-      <article className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-6 min-w-0">
+      <article className="min-w-0 pt-1">
         {active ? (
           <>
             {active.sub && (
@@ -803,7 +803,7 @@ export default function Guide() {
                 ← 전략 목록으로
               </button>
             )}
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{active.title}</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">{active.title}</h2>
             {typeof active.body === "function" ? active.body(setActiveId) : active.body}
           </>
         ) : (

@@ -43,7 +43,7 @@ export default function ForgotPassword() {
               </div>
             )}
             <button onClick={() => navigate("/login")}
-              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white">
+              className="w-full rounded-lg bg-brand hover:bg-brand-hover px-4 py-2.5 text-sm font-semibold text-brand-ink">
               로그인으로
             </button>
           </div>
@@ -53,7 +53,7 @@ export default function ForgotPassword() {
               onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
             {error && <div className="text-sm text-red-600">{error}</div>}
             <button type="submit" disabled={busy}
-              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-white">
+              className="w-full rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-brand-ink">
               {busy ? "보내는 중…" : "재설정 링크 보내기"}
             </button>
           </form>

@@ -67,7 +67,7 @@ export default function FearGreedBanner() {
           <InfoTooltip term="fear_greed" placement="bottom" />
         </span>
 
-        <span className={"font-bold tabular-nums " + t.text}>{v}</span>
+        <span className={"font-bold num " + t.text}>{v}</span>
         <span className={"text-xs font-semibold " + t.text}>{data.classification_ko}</span>
 
         {/* 0~100 mini gauge */}

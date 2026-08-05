@@ -70,7 +70,7 @@ function CommentForm({ postId, onAdded }) {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-1.5 text-sm font-bold text-white"
+          className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-1.5 text-sm font-bold text-brand-ink"
         >
           {busy ? "등록 중…" : "댓글 등록"}
         </button>
@@ -167,8 +167,8 @@ export default function BoardPost() {
     <div className="max-w-3xl mx-auto">
       <Link to="/board" className="text-sm text-indigo-600 hover:underline">← 목록으로</Link>
 
-      <article className="mt-3 rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
-        <h1 className="text-xl font-bold text-slate-900">{post.title}</h1>
+      <article className="mt-4 pb-5 border-b border-slate-200">
+        <h1 className="text-2xl font-bold text-slate-900">{post.title}</h1>
         <div className="mt-1 flex items-center justify-between gap-2 flex-wrap">
           <div className="text-sm text-slate-500">
             {post.author_name} · {post.created_kst}
@@ -199,7 +199,7 @@ export default function BoardPost() {
         <h2 className="text-sm font-semibold text-slate-700 mb-2">
           댓글 <span className="text-slate-400">({post.comments.length})</span>
         </h2>
-        <div className="rounded-2xl bg-surface border border-slate-200 px-4 sm:px-5 divide-y divide-slate-100">
+        <div className="divide-y divide-slate-200 border-t border-slate-200">
           {post.comments.length === 0 ? (
             <div className="py-4 text-sm text-slate-400">첫 댓글을 남겨보세요.</div>
           ) : (

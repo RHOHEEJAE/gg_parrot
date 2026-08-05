@@ -63,7 +63,7 @@ export default function HangangTempBanner() {
           🌊 한강 수온
           <InfoTooltip term="hangang_temp" placement="bottom" />
         </span>
-        <span className="font-bold tabular-nums text-sky-700">{t.toFixed(1)}°C</span>
+        <span className="font-bold num text-sky-700">{t.toFixed(1)}°C</span>
         <span className="text-xs text-slate-500">
           ({data.location}
           {data.observed_label ? ` · ${data.observed_label} 기준` : ""})

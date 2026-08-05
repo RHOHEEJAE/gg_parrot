@@ -86,7 +86,7 @@ function AuthNav() {
           로그인
         </button>
         <button onClick={() => navigate("/login?mode=signup")}
-          className="px-2.5 sm:px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-indigo-600 hover:bg-indigo-500 text-white">
+          className="px-2.5 sm:px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-brand hover:bg-brand-hover text-brand-ink">
           회원가입
         </button>
       </div>
@@ -100,7 +100,7 @@ function AuthNav() {
         👤 {user.username}
       </button>
       <button onClick={() => navigate("/mypage")}
-        className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-300 px-2 sm:px-2.5 py-1 text-xs font-bold whitespace-nowrap text-amber-800 hover:bg-amber-100"
+        className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200 px-2 sm:px-2.5 py-1 text-xs font-bold whitespace-nowrap text-indigo-800 hover:bg-indigo-100 num"
         title="마이페이지 · 보유 포인트">
         🪙 {(user.points_balance ?? 0).toLocaleString()}P
       </button>
@@ -127,7 +127,7 @@ function RequireAuth({ children }) {
       <div className="mt-5 flex items-center justify-center gap-2">
         <button
           onClick={() => navigate("/login")}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-sm font-bold text-white"
+          className="rounded-lg bg-brand hover:bg-brand-hover px-5 py-2 text-sm font-bold text-brand-ink"
         >
           로그인
         </button>

@@ -69,7 +69,7 @@ export default function Auth() {
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <button type="submit" disabled={busy}
-            className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-white">
+            className="w-full rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-brand-ink">
             {busy ? "처리 중…" : isSignup ? "가입하기" : "로그인"}
           </button>
         </form>

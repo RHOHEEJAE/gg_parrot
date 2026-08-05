@@ -41,7 +41,7 @@ export default function ResetPassword() {
               비밀번호가 변경됐어요. 새 비밀번호로 로그인해 주세요.
             </div>
             <button onClick={() => navigate("/login")}
-              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white">
+              className="w-full rounded-lg bg-brand hover:bg-brand-hover px-4 py-2.5 text-sm font-semibold text-brand-ink">
               로그인
             </button>
           </div>
@@ -54,7 +54,7 @@ export default function ResetPassword() {
             </label>
             {error && <div className="text-sm text-red-600">{error}</div>}
             <button type="submit" disabled={busy}
-              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-white">
+              className="w-full rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2.5 text-sm font-semibold text-brand-ink">
               {busy ? "변경 중…" : "비밀번호 변경"}
             </button>
           </form>

@@ -19,10 +19,10 @@ function Item({ coin, onPick, ariaHidden }) {
       className="inline-flex items-center gap-1.5 px-4 py-0.5 hover:bg-slate-100 rounded-md transition-colors"
     >
       <span className="font-bold text-slate-900">{coin.base}</span>
-      <span className={`font-semibold tabular-nums ${color}`}>
+      <span className={`font-semibold num ${color}`}>
         {up ? "▲" : "▼"}{Math.abs(coin.change_pct).toFixed(2)}%
       </span>
-      <span className="text-xs text-slate-500 tabular-nums">${fmtPrice(coin.last_price)}</span>
+      <span className="text-xs text-slate-500 num">${fmtPrice(coin.last_price)}</span>
     </button>
   );
 }

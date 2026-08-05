@@ -80,7 +80,7 @@ function CoinRow({ coin }) {
       >
         <span className="flex items-center gap-2 min-w-0">
           <span className="font-bold text-slate-900">{coinOf(coin.symbol)}</span>
-          <span className={"text-xs font-semibold tabular-nums " + (up ? "text-green-600" : "text-red-600")}>
+          <span className={"text-xs font-semibold num " + (up ? "text-green-600" : "text-red-600")}>
             {up ? "+" : ""}{(coin.change_pct ?? 0).toFixed(2)}%
           </span>
         </span>
@@ -144,8 +144,8 @@ export default function News() {
 
       {/* 시장·규제 전반 */}
       {market && (
-        <section className="rounded-2xl bg-surface border border-slate-200 p-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-1">🌐 시장·규제 한눈에</h2>
+        <section className="pt-1">
+          <h2 className="text-xl font-bold text-slate-900 mb-1">🌐 시장·규제 한눈에</h2>
           {market.overview ? (
             <div className="mt-2 rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-3">
               <div className="text-[11px] font-semibold text-indigo-600 mb-1">🦜 껄무새 AI 요약</div>
@@ -166,7 +166,7 @@ export default function News() {
 
       {/* 경주마 동향 */}
       <section>
-        <h2 className="text-lg font-semibold text-slate-800 mb-1">🏇 경주마 동향</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-1">🏇 경주마 동향</h2>
         <p className="text-sm text-slate-500 mb-3">
           '오늘의 경주마'(급등·활발히 거래되는 코인)별 최신 뉴스예요. 코인을 눌러 펼쳐 보세요.
         </p>

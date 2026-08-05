@@ -62,7 +62,7 @@ export default function ChatBox() {
         {items.length === 0 && <div className="text-slate-500 text-sm text-center py-8">아직 메시지가 없습니다. 첫 채팅을 남겨보세요.</div>}
         {items.map((m) => (
           <div key={m.id} className="text-sm">
-            <span className="text-slate-500 text-xs mr-2 tabular-nums">{m.created_kst}</span>
+            <span className="text-slate-500 text-xs mr-2 num">{m.created_kst}</span>
             <span className="font-semibold text-indigo-700 mr-1.5">{m.username}</span>
             <span className="text-slate-800 break-words">{m.text}</span>
           </div>
@@ -84,7 +84,7 @@ export default function ChatBox() {
           placeholder="메시지 입력 (최대 300자)"
           className="flex-1 min-w-[8rem] rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
-        <button type="submit" disabled={busy} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white">
+        <button type="submit" disabled={busy} className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2 text-sm font-semibold text-brand-ink">
           전송
         </button>
       </form>
