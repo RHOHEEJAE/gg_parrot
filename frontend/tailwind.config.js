@@ -30,6 +30,13 @@ export default {
         // must stay dark — one variable can't serve both.
         danger: v("--c-danger"),
         "danger-hover": v("--c-danger-hover"),
+        // Brand CTA fill (binance yellow). Its label is always `brand-ink`,
+        // never white — white-on-yellow fails contrast in both themes.
+        // In light mode yellow is FILL ONLY: yellow text on white is 1.4:1.
+        brand: v("--c-brand"),
+        "brand-hover": v("--c-brand-hover"),
+        "brand-ink": v("--c-brand-ink"),
+        "brand-line": v("--c-brand-line"),
         slate: scale("slate", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
         indigo: scale("indigo", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
         red: scale("red", [50, 100, 300, 400, 500, 600, 700, 800]),
@@ -38,6 +45,10 @@ export default {
         blue: scale("blue", [50, 300, 500, 600, 800]),
         cyan: scale("cyan", [50, 100, 200, 700, 800]),
         sky: scale("sky", [50, 100, 700, 800]),
+      },
+      fontFamily: {
+        sans: ['"Pretendard"', "system-ui", '"Apple SD Gothic Neo"', '"Malgun Gothic"', "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
     },
   },

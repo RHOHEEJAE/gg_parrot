@@ -1,32 +1,27 @@
 import { useMemo, useState } from "react";
+import { PageHeader } from "../components/Page.jsx";
 
 // 코린이(코인 입문자)용 가이드 — 문서(docs) 형식: 좌측 목차 + 검색 + 본문.
 // 각 섹션은 검색용 plain `text`와 렌더용 `body`(JSX 또는 (go)=>JSX)를 함께 갖는다.
 // 규칙 A~K는 개요 페이지(rules) 아래 하위 페이지(rule-a ... rule-k)로 나뉜다.
 
+// 본문 램프(§3-2): body 17/1.55, 제목은 17/700 + 자간 조임.
 function P({ children }) {
-  return <p className="text-slate-700 leading-relaxed mb-3">{children}</p>;
+  return <p className="t-body text-slate-600 mb-3">{children}</p>;
 }
 function H({ children }) {
-  return <h3 className="text-slate-900 font-bold mt-5 mb-2">{children}</h3>;
+  return <h3 className="t-title text-slate-900 mt-6 mb-2">{children}</h3>;
 }
+// 상자 대신 왼쪽 규칙(§6 notice) — 가이드 본문이 색 블록으로 끊기지 않게 한다.
 function Note({ children }) {
-  return (
-    <div className="my-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-      {children}
-    </div>
-  );
+  return <div className="notice-warn my-4 t-label font-medium text-slate-700">{children}</div>;
 }
 function Tip({ children }) {
-  return (
-    <div className="my-3 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-900">
-      {children}
-    </div>
-  );
+  return <div className="notice my-4 t-label font-medium text-slate-700">{children}</div>;
 }
 function Steps({ items }) {
   return (
-    <ol className="list-decimal pl-5 space-y-1.5 text-slate-700 mb-3">
+    <ol className="list-decimal pl-5 space-y-2 t-body text-slate-600 mb-3">
       {items.map((it, i) => (
         <li key={i}>{it}</li>
       ))}
@@ -36,19 +31,19 @@ function Steps({ items }) {
 // 파라미터 표 — 빌더에서 조정하는 숫자들의 뜻.
 function Params({ rows }) {
   return (
-    <div className="my-3 overflow-x-auto">
-      <table className="w-full text-sm min-w-[360px]">
+    <div className="my-4 overflow-x-auto">
+      <table className="w-full min-w-[360px]">
         <thead>
-          <tr className="text-slate-500 border-b border-slate-200">
-            <th className="text-left py-1.5 pr-3">파라미터</th>
+          <tr className="border-b border-slate-200 t-caption text-slate-700">
+            <th className="text-left py-2 pr-3">파라미터</th>
             <th className="text-left pr-3">뜻</th>
           </tr>
         </thead>
         <tbody>
           {rows.map(([k, v], i) => (
-            <tr key={i} className="border-b border-slate-100 last:border-0 align-top">
-              <td className="py-1.5 pr-3 font-mono text-[13px] text-indigo-700 whitespace-nowrap">{k}</td>
-              <td className="py-1.5 pr-3 text-slate-700">{v}</td>
+            <tr key={i} className="border-b border-slate-200 last:border-0 align-top">
+              <td className="py-3 pr-3 num t-caption text-slate-900 whitespace-nowrap">{k}</td>
+              <td className="py-3 pr-3 t-label font-medium text-slate-700">{v}</td>
             </tr>
           ))}
         </tbody>
@@ -56,16 +51,16 @@ function Params({ rows }) {
     </div>
   );
 }
-// 언제 쓰나 / 주의 — 한 쌍의 색 카드.
+// 언제 쓰나 / 주의 — 색 카드 두 장 대신 왼쪽 규칙 두 줄.
 function GoodBad({ good, bad }) {
   return (
-    <div className="my-3 grid sm:grid-cols-2 gap-3">
-      <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-800">
-        <div className="font-bold mb-1">👍 이럴 때 잘 맞아요</div>
+    <div className="my-4 grid sm:grid-cols-2 gap-4">
+      <div className="notice-good t-label font-medium text-slate-700">
+        <div className="font-bold text-slate-900 mb-1">잘 맞는 경우</div>
         {good}
       </div>
-      <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-        <div className="font-bold mb-1">⚠️ 이럴 땐 조심</div>
+      <div className="notice-risk t-label font-medium text-slate-700">
+        <div className="font-bold text-slate-900 mb-1">주의할 경우</div>
         {bad}
       </div>
     </div>
@@ -76,7 +71,10 @@ function GoodBad({ good, bad }) {
 // 미니 일러스트 차트 (의존성 없음, 다크모드는 --chart-* 변수로 대응)
 // 좌표계: x,y 모두 0~100 (y는 0=바닥, 100=천장). 아래 fx/fy가 패딩 적용해 매핑.
 // ---------------------------------------------------------------------------
-const FIG_W = 340, FIG_H = 172, FIG_PAD = { l: 10, r: 10, t: 12, b: 22 };
+// viewBox 는 '그려질 실제 크기'로 잡는다. 예전엔 340×172 로 그려 놓고 880px 폭에
+// 늘려서 썼는데, 그러면 배율이 2.6배가 되어 라벨 10.5px 이 27px 로 — 페이지 제목(24px)
+// 보다 크게 찍혔다. 도형 안 글자는 본문 글자와 같은 크기로 보여야 한다.
+const FIG_W = 560, FIG_H = 220, FIG_PAD = { l: 16, r: 16, t: 16, b: 30 };
 const fx = (x) => FIG_PAD.l + (x / 100) * (FIG_W - FIG_PAD.l - FIG_PAD.r);
 const fy = (y) => FIG_PAD.t + (1 - y / 100) * (FIG_H - FIG_PAD.t - FIG_PAD.b);
 const poly = (pts) => pts.map(([x, y]) => `${fx(x).toFixed(1)},${fy(y).toFixed(1)}`).join(" ");
@@ -90,20 +88,21 @@ const C = {
   band2: "rgb(var(--c-indigo-300))",
 };
 
+// 차트를 상자에 담지 않는다(§6 bar-chart) — 캡션은 13/600.
 function Fig({ caption, legend, children }) {
   return (
-    <figure className="my-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <figure className="my-5 max-w-[560px]">
       <svg viewBox={`0 0 ${FIG_W} ${FIG_H}`} className="w-full h-auto" role="img" aria-label={caption}>
         {children}
       </svg>
-      {legend && <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">{legend}</div>}
-      {caption && <figcaption className="mt-1.5 text-xs text-slate-500 leading-relaxed">{caption}</figcaption>}
+      {legend && <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 t-caption">{legend}</div>}
+      {caption && <figcaption className="mt-2 t-caption text-slate-700 leading-relaxed">{caption}</figcaption>}
     </figure>
   );
 }
 function Key({ color, label, dash }) {
   return (
-    <span className="inline-flex items-center gap-1 text-slate-600">
+    <span className="inline-flex items-center gap-1 text-slate-700">
       <svg width="16" height="8" aria-hidden>
         <line x1="0" y1="4" x2="16" y2="4" stroke={color} strokeWidth="2.5" strokeDasharray={dash || "0"} />
       </svg>
@@ -125,14 +124,19 @@ function Line2({ points, color = C.price, dash, width = 2 }) {
   );
 }
 function HL({ y, color, dash = "4 3" }) {
-  return <line x1={fx(0)} x2={fx(100)} y1={fy(y)} y2={fy(y)} stroke={color} strokeWidth="1.2" strokeDasharray={dash} />;
+  return <line x1={fx(0)} x2={fx(100)} y1={fy(y)} y2={fy(y)} stroke={color} strokeWidth="1.5" strokeDasharray={dash} />;
 }
 function Dot({ x, y, color, r = 4 }) {
-  return <circle cx={fx(x)} cy={fy(y)} r={r} fill={color} stroke="#fff" strokeWidth="1" />;
+  // 겹치는 선 위에서도 떨어져 보이도록 캔버스색 링을 두른다. `#fff` 하드코딩은
+  // 다크에서 흰 테두리가 되어 오히려 튀었다.
+  return (
+    <circle cx={fx(x)} cy={fy(y)} r={r * 1.4} fill={color}
+      stroke="rgb(var(--c-slate-50))" strokeWidth="1.5" />
+  );
 }
 function Tag({ x, y, text, color, dy = -9, anchor = "middle" }) {
   return (
-    <text x={fx(x)} y={fy(y) + dy} fontSize="10.5" fill={color} textAnchor={anchor} fontWeight="700">
+    <text x={fx(x)} y={fy(y) + dy * 1.5} fontSize="13" fill={color} textAnchor={anchor} fontWeight="700">
       {text}
     </text>
   );
@@ -150,8 +154,8 @@ function FigA() {
       <HL y={42} color={C.down} />
       <Line2 points={price} />
       <Dot x={4} y={38} color={C.price} r={3} /><Tag x={4} y={38} text="진입" color={C.price} dy={16} anchor="start" />
-      <Dot x={30} y={71} color={C.up} /><Tag x={30} y={71} text="익절 ✅" color={C.up} />
-      <Dot x={60} y={39} color={C.down} /><Tag x={60} y={39} text="손절 ✂️" color={C.down} dy={16} />
+      <Dot x={30} y={71} color={C.up} /><Tag x={30} y={71} text="익절" color={C.up} />
+      <Dot x={60} y={39} color={C.down} /><Tag x={60} y={39} text="손절" color={C.down} dy={16} />
       <Dot x={70} y={47} color={C.price} r={3} /><Tag x={70} y={47} text="재진입" color={C.price} />
     </Fig>
   );
@@ -205,7 +209,7 @@ function FigD() {
   return (
     <Fig caption="상·하단 구간을 격자로 나눠, 한 칸 내려가면 사고 한 칸 오르면 파는 걸 반복해요. 위아래로 흔들리는 횡보장에서 잔수익을 모아요."
       legend={<><Key color={C.grid} label="그리드 선" /><Key color={C.up} label="매수" /><Key color={C.down} label="매도" /></>}>
-      {grids.map((y, i) => <HL key={i} y={y} color={C.grid} dash="2 2" />)}
+      {grids.map((y, i) => <HL key={i} y={y} color={C.grid} dash="0" />)}
       <Line2 points={price} />
       <Dot x={14} y={44} color={C.up} r={3.5} />
       <Dot x={24} y={52} color={C.down} r={3.5} />
@@ -226,7 +230,7 @@ function FigE() {
       <Line2 points={trail} color={C.band} dash="4 3" width={1.6} />
       <Line2 points={price} />
       <Dot x={58} y={75} color={C.up} /><Tag x={58} y={75} text="고점" color={C.up} />
-      <Dot x={66} y={65} color={C.down} /><Tag x={66} y={65} text="청산 ✅" color={C.down} dy={16} />
+      <Dot x={66} y={65} color={C.down} /><Tag x={66} y={65} text="청산" color={C.down} dy={16} />
     </Fig>
   );
 }
@@ -241,8 +245,8 @@ function FigF() {
       <Line2 points={rsi} color={C.band} />
       <Dot x={33} y={30} color={C.up} /><Tag x={33} y={30} text="진입" color={C.up} dy={16} />
       <Dot x={63} y={79} color={C.down} /><Tag x={63} y={79} text="청산" color={C.down} />
-      <text x={fx(2)} y={fy(70) - 3} fontSize="9" fill={C.down}>70</text>
-      <text x={fx(2)} y={fy(30) + 12} fontSize="9" fill={C.up}>30</text>
+      <text x={fx(2)} y={fy(70) - 5} fontSize="12" fill={C.down} fontWeight="600">70</text>
+      <text x={fx(2)} y={fy(30) + 16} fontSize="12" fill={C.up} fontWeight="600">30</text>
     </Fig>
   );
 }
@@ -279,7 +283,7 @@ function FigH() {
       <Dot x={34} y={53} color={C.up} r={5} />
       <Dot x={48} y={46} color={C.up} r={6} />
       <Dot x={62} y={42} color={C.up} r={7} /><Tag x={62} y={42} text="추가매수" color={C.up} dy={18} />
-      <Dot x={80} y={54} color={C.down} /><Tag x={80} y={55} text="평단+X% 익절 ✅" color={C.down} anchor="end" />
+      <Dot x={80} y={54} color={C.down} /><Tag x={80} y={55} text="평단+X% 익절" color={C.down} anchor="end" />
     </Fig>
   );
 }
@@ -291,7 +295,7 @@ function FigI() {
       legend={<><Key color={C.band} label="돌파선(시가+k×전일폭)" dash="4 3" /><Key color={C.up} label="돌파 진입" />{KEY_PRICE}</>}>
       <HL y={54} color={C.band} />
       <Line2 points={price} />
-      <Dot x={57} y={54} color={C.up} /><Tag x={57} y={54} text="돌파 → 진입 🚀" color={C.up} anchor="start" dy={-9} />
+      <Dot x={57} y={54} color={C.up} /><Tag x={57} y={54} text="돌파 → 진입" color={C.up} anchor="start" dy={-9} />
       <Tag x={6} y={44} text="시가" color={C.price} dy={16} anchor="start" />
     </Fig>
   );
@@ -325,7 +329,7 @@ function FigK() {
       <Line2 points={shortSeg} color={C.down} width={2.4} />
       <Line2 points={long2} color={C.up} width={2.4} />
       <Dot x={38} y={66} color={C.up} /><Tag x={38} y={66} text="고점" color={C.up} />
-      <Dot x={46} y={58} color={C.down} /><Tag x={46} y={58} text="숏 전환 🛡️" color={C.down} dy={16} />
+      <Dot x={46} y={58} color={C.down} /><Tag x={46} y={58} text="숏 전환" color={C.down} dy={16} />
       <Dot x={76} y={42} color={C.up} /><Tag x={76} y={42} text="롱 재진입" color={C.up} dy={16} />
     </Fig>
   );
@@ -491,7 +495,7 @@ const RULE_PAGES = [
           good="일시적으로 빠졌다 다시 오르는 종목에서 평단을 낮춰 반등에 익절하고 싶을 때."
           bad="계속 하락하면 총알(max_safety_orders)이 바닥나고 큰 물량이 물려요. 레버리지와 겹치면 청산 위험 급증. 반드시 감당 가능한 자금 안에서."
         />
-        <Note>🚨 마틴게일은 '작은 수익을 자주, 큰 손실을 가끔' 내는 구조예요. 한 번의 큰 하락이 그동안의 수익을 다 지울 수 있어요.</Note>
+        <Note><b>주의:</b> 마틴게일은 '작은 수익을 자주, 큰 손실을 가끔' 내는 구조예요. 한 번의 큰 하락이 그동안의 수익을 다 지울 수 있어요.</Note>
       </>
     ),
   },
@@ -553,7 +557,7 @@ const RULE_PAGES = [
           good="급락 구간에서 손실을 방어하거나 하락에서도 수익을 내고 싶을 때(방향 전환형)."
           bad="위아래로 흔드는 장에선 전환이 잦아 양쪽에서 손절날 수 있어요. 선물·숏이라 청산 위험도 함께 고려."
         />
-        <Note>🧨 숏·선물이 포함돼 레버리지 청산 위험이 있어요. 코린이라면 개념을 이해한 뒤 낮은 배수(1~2배)로만 실험하세요.</Note>
+        <Note><b>주의:</b> 숏·선물이 포함돼 레버리지 청산 위험이 있어요. 코린이라면 개념을 이해한 뒤 낮은 배수(1~2배)로만 실험하세요.</Note>
       </>
     ),
   },
@@ -572,7 +576,7 @@ const BASE_SECTIONS = [
           돌려보고(<b>백테스트</b>), 실시간 모의로 굴려보는(<b>페이퍼 트레이딩</b>) <b>교육용 놀이터</b>예요.
         </P>
         <P>목표는 "돈 잃지 않고 배우기". 여기서 마음껏 실패하면서 감을 잡는 게 핵심이에요.</P>
-        <Note>⚠️ 껄무새 안의 모든 수치는 과거/모의 시뮬레이션 결과예요. 투자 조언이 아니고, 수익을 보장하지 않아요.</Note>
+        <Note><b>주의:</b> 웹 화면의 모든 수치는 과거·모의 시뮬레이션 결과예요. 투자 조언이 아니고, 수익을 보장하지 않아요.</Note>
       </>
     ),
   },
@@ -597,7 +601,7 @@ const BASE_SECTIONS = [
           ]}
         />
         <Note>
-          🚨 <b>네트워크·주소를 틀리면 자산이 사라질 수 있어요.</b> 첫 전송은 꼭 소액으로 테스트하세요.
+          <b>주의: 네트워크·주소를 틀리면 자산이 사라질 수 있어요.</b> 첫 전송은 꼭 소액으로 테스트하세요.
           전송 코인/네트워크 선택, 수수료, 한국 거래소의 트래블룰(수취인 확인)도 미리 확인하세요.
           이건 절차 설명일 뿐 특정 코인 추천이 아니고, 실제 자산 이동 책임은 본인에게 있어요.
         </Note>
@@ -622,7 +626,7 @@ const BASE_SECTIONS = [
           <b> 선물</b>에서만 가능하고, 오르면 손실이 이론상 무제한이라 <b>손절이 필수</b>예요.
         </P>
         <Note>
-          🧨 <b>레버리지</b>는 수익도 손실도 배로 키워요. 예: 10배면 가격이 약 10%만 반대로 움직여도
+          <b>주의: 레버리지</b>는 수익도 손실도 배로 키워요. 예: 10배면 가격이 약 10%만 반대로 움직여도
           <b> 청산(투입금 전액 손실)</b>돼요. 코린이라면 레버리지는 낮게(1~3배) 또는 안 쓰는 걸 권해요.
         </Note>
       </>
@@ -636,16 +640,19 @@ const BASE_SECTIONS = [
     body: (go) => (
       <>
         <P>껄무새 빌더에서 고를 수 있는 매매 규칙(전략)이에요. 하나를 고르고 숫자(파라미터)만 조정하면 매크로가 완성돼요. 각 항목을 눌러 자세한 설명·차트 예시를 보세요.</P>
-        <div className="space-y-2">
+        {/* 카드 목록이 아니라 괘선 리스트 — 행 제목 17/700, chevron 만 장식색. */}
+        <div className="border-t border-slate-200">
           {RULE_PAGES.map((r) => (
             <button
               key={r.id}
               onClick={() => go(r.id)}
-              className="w-full text-left rounded-lg bg-slate-100 border border-slate-200 px-3 py-2 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+              className="w-full text-left border-b border-slate-200 py-4 px-2 -mx-2 rounded-lg hover:bg-slate-100"
             >
-              <div className="font-bold text-slate-900 flex items-center justify-between">
-                <span><span className="inline-block w-6 text-indigo-600">{r.letter}</span> {r.name}</span>
-                <span className="text-indigo-500 text-sm">자세히 →</span>
+              <div className="flex items-center justify-between gap-3">
+                <span className="t-title text-slate-900">
+                  <span className="inline-block w-6 num text-slate-500">{r.letter}</span> {r.name}
+                </span>
+                <span className="t-small font-semibold text-slate-400 shrink-0">자세히 →</span>
               </div>
             </button>
           ))}
@@ -679,7 +686,7 @@ const BASE_SECTIONS = [
           ]}
         />
         <P>결과 밑의 <b>🦜 껄무새 AI 해설</b>을 누르면 "왜 이렇게 나왔는지 + 이 매크로를 쓴다면" 관점을 쉽게 정리해줘요.</P>
-        <Note>⚠️ 백테스트가 좋아도 '과거의 한 구간'일 뿐이에요. 다른 기간·다른 종목에서도 되는지 확인하는 습관(과최적화 주의)이 중요해요.</Note>
+        <Note><b>주의:</b> 백테스트가 좋아도 '과거의 한 구간'일 뿐이에요. 다른 기간·다른 종목에서도 되는지 확인하는 습관(과최적화 주의)이 중요해요.</Note>
       </>
     ),
   },
@@ -695,10 +702,10 @@ const BASE_SECTIONS = [
         </P>
         <Steps
           items={[
-            "회원가입하면 스타터 포인트를 줘요(헤더의 🪙).",
-            "남의 매크로는 아이디·종목·등락률만 보이고, 🔓 포인트를 쓰면 전략과 매크로가 공개+복사돼요.",
+            "회원가입하면 스타터 포인트를 줘요(헤더에서 잔액 확인).",
+            "남의 매크로는 아이디·종목·등락률만 보이고, 포인트로 언락하면 전략과 설정이 공개·복사돼요.",
             "내 매크로를 남이 언락하면 그 포인트의 70%가 나에게 적립돼요.",
-            "판매·좋아요가 쌓이면 아이디에 👑이 붙어요. 내 활동은 마이페이지에서 확인해요.",
+            "판매·좋아요가 쌓이면 인기 셀러로 표시돼요. 내 활동은 마이페이지에서 확인해요.",
           ]}
         />
         <Note>포인트는 서비스 내 가상 재화예요. 실거래/투자 자문이 아니에요.</Note>
@@ -712,7 +719,10 @@ const BASE_SECTIONS = [
     body: (
       <>
         <H>실제로 돈이 움직이나요?</H>
-        <P>아니요. 껄무새는 모의(페이퍼)만 해요. 실제 주문/자산 이동은 없어요.</P>
+        <P>
+          웹의 백테스트·페이퍼·리더보드는 실제 주문을 보내지 않아요. 다만 페이퍼 화면 아래에서 내려받는
+          실행 파일은 사용자 PC에서 거래소 API 키를 넣어 실행하며, 기본은 테스트넷이지만 설정을 바꾸면 실제 주문을 보낼 수 있어요.
+        </P>
         <H>백테스트에서 매매가 0번이에요.</H>
         <P>진입 조건이 그 기간에 한 번도 안 맞은 거예요. 조건을 느슨하게 하거나 기간·봉 단위를 바꿔보세요.</P>
         <H>종목(symbol)은 어떻게 쓰나요?</H>
@@ -727,9 +737,11 @@ const BASE_SECTIONS = [
 
 const SECTIONS = BASE_SECTIONS;
 
-export default function Guide() {
+export default function Guide({ embedded = false, initialSection = "start" }) {
   const [q, setQ] = useState("");
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+  const [activeId, setActiveId] = useState(() =>
+    SECTIONS.some((section) => section.id === initialSection) ? initialSection : SECTIONS[0].id
+  );
   const [tocOpen, setTocOpen] = useState(false); // mobile only; ≥md the list is always shown
 
   const filtered = useMemo(() => {
@@ -744,14 +756,22 @@ export default function Guide() {
   const active = filtered.find((s) => s.id === activeId) || filtered[0] || null;
 
   return (
-    <div className="grid md:grid-cols-[230px_1fr] gap-4 md:gap-6">
+    <div className={embedded ? "guide-embedded" : ""}>
+      <PageHeader
+        eyebrow="용어부터 전략까지"
+        title="사용 가이드"
+        description="궁금한 단어를 검색하거나, 매매 방식 A~K의 작동 원리를 그림과 함께 확인해요."
+        headingAs={embedded ? "h2" : "h1"}
+      />
+      <div className="grid md:grid-cols-[230px_1fr] gap-4 md:gap-6">
       {/* sidebar */}
-      <aside className="md:sticky md:top-20 self-start">
+      <aside className={(embedded ? "md:sticky md:top-0 " : "md:sticky md:top-20 ") + "self-start"}>
         <input
           value={q}
+          aria-label="가이드 검색"
           onChange={(e) => setQ(e.target.value)}
-          placeholder="🔍 가이드 검색…"
-          className="w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 mb-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="가이드 검색…"
+          className="field field-sm mb-3"
         />
         {/* On a phone the full contents list would push every article a screen
             and a half down, so it collapses behind the current section name. */}
@@ -759,60 +779,61 @@ export default function Guide() {
           type="button"
           onClick={() => setTocOpen((v) => !v)}
           aria-expanded={tocOpen}
-          className="md:hidden w-full mb-2 flex items-center justify-between gap-2 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+          className="btn btn-m btn-secondary md:hidden w-full mb-2 justify-between"
         >
-          <span className="truncate">📑 목차 · {active ? active.title : "문서 선택"}</span>
+          <span className="truncate">목차 · {active ? active.title : "문서 선택"}</span>
           <span className="shrink-0 text-slate-400">{tocOpen ? "▲" : "▼"}</span>
         </button>
-        <nav className={(tocOpen ? "block " : "hidden ") + "md:block space-y-1"}>
+        {/* 목차는 단일 선택 — 선택된 문서 하나만 노란 채움(화면당 하나, §1-4). */}
+        <nav aria-label="가이드 목차" className={(tocOpen ? "block " : "hidden ") + "md:block space-y-1"}>
           {filtered.map((s) => (
             <button
               key={s.id}
+              aria-current={active && active.id === s.id ? "page" : undefined}
               onClick={() => {
                 setActiveId(s.id);
                 setTocOpen(false);
               }}
               className={
-                "w-full text-left rounded-lg text-sm " +
-                (s.sub ? "pl-6 pr-3 py-1.5 " : "px-3 py-2 ") +
+                "w-full text-left rounded-[10px] t-small " +
+                (s.sub ? "pl-6 pr-3 py-2 " : "px-3 py-3 ") +
                 (active && active.id === s.id
-                  ? "bg-indigo-600 text-white font-semibold"
-                  : s.sub
-                  ? "text-slate-500 hover:bg-slate-100"
-                  : "text-slate-600 hover:bg-slate-100 font-medium")
+                  ? "bg-brand text-brand-ink font-bold"
+                  : "font-semibold text-slate-700 hover:bg-slate-100")
               }
             >
               {s.title}
             </button>
           ))}
           {filtered.length === 0 && (
-            <div className="text-sm text-slate-400 px-3 py-2">검색 결과가 없어요.</div>
+            <div className="t-small text-slate-500 px-3 py-2">검색 결과가 없어요.</div>
           )}
         </nav>
       </aside>
 
       {/* content */}
-      <article className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-6 min-w-0">
+      <article className="min-w-0">
         {active ? (
           <>
             {active.sub && (
               <button
                 onClick={() => setActiveId("rules")}
-                className="mb-3 text-sm text-indigo-600 hover:underline"
+                className="mb-3 t-small font-semibold text-slate-700 hover:text-slate-900"
               >
                 ← 전략 목록으로
               </button>
             )}
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{active.title}</h2>
+            <h2 className="t-h2 text-slate-900 mb-4">{active.title}</h2>
             {typeof active.body === "function" ? active.body(setActiveId) : active.body}
           </>
         ) : (
-          <div className="text-slate-500">문서를 선택하세요.</div>
+          <div className="t-small text-slate-500">문서를 골라주세요.</div>
         )}
-        <p className="mt-8 pt-4 border-t border-slate-200 text-xs text-slate-400">
-          본 가이드는 교육용 정보이며 투자 조언이 아닙니다. 실제 거래·자산 이동의 책임은 본인에게 있습니다.
+        <p className="mt-8 pt-4 border-t border-slate-200 t-caption text-slate-500">
+          본 가이드는 교육용 정보이고 투자 조언이 아니에요. 실제 거래·자산 이동의 책임은 본인에게 있어요.
         </p>
       </article>
+      </div>
     </div>
   );
 }

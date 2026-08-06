@@ -15,7 +15,9 @@ async function req(path, opts = {}) {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch (_) {}
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -33,7 +35,9 @@ async function reqForm(path, formData) {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch (_) {}
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -58,7 +62,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ macro, period_override: periodOverride || null }),
     }),
-  // 껄무새 AI 원인 분석 (온디맨드). 서버 OpenAI 키 사용. 키 없거나 실패 시
+  // 껄무새 AI 원인 분석 (온디맨드). 서버 Anthropic 키 사용. 키 없거나 실패 시
   // 규칙기반 해설 + ai_error 로 폴백해 응답.
   explainAi: (macro, periodOverride) =>
     req("/api/explain/ai", {
@@ -72,7 +76,6 @@ export const api = {
       body: JSON.stringify({ macro, tp_values: tpValues || null, sl_values: slValues || null }),
     }),
 
-  gallery: () => req("/api/gallery"),
   cardUrl: (slug) => `/api/card/${slug}.png`,
 
   // kimchi premium (reference indicator; upbit vs binance×USDKRW)
@@ -173,7 +176,8 @@ export const api = {
   // paper (simulated) trading
   paperStart: (macro, symbol, mode) =>
     req("/api/paper/start", { method: "POST", body: JSON.stringify({ macro, symbol, mode }) }),
-  paperStop: (sessionId) => req(`/api/paper/${sessionId}/stop`, { method: "POST" }),
+  paperStop: (sessionId, options = {}) =>
+    req(`/api/paper/${sessionId}/stop`, { method: "POST", keepalive: !!options.keepalive }),
   paperStatus: (sessionId) => req(`/api/paper/${sessionId}`),
 
   // real-trade executable bundle (demo mockup zip). Triggers a file download.

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import SimBadge from "../components/SimBadge.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
 import ChatBox from "../components/ChatBox.jsx";
+import { PageHeader, EmptyState, Loading, ErrorNote } from "../components/Page.jsx";
 import { api } from "../api.js";
 import { getUserId } from "../lib/user.js";
 import { useAuth, isLoggedIn, getAuthUser, updateAuthUser } from "../lib/auth.js";
@@ -19,6 +20,9 @@ function ret(e) {
 export default function Leaderboard() {
   const uid = getUserId();
   const navigate = useNavigate();
+  const location = useLocation();
+  const registeredId = location.state?.registeredId || null;
+  const justRegistered = !!location.state?.justRegistered;
   useAuth(); // re-render on login/logout so gating reflects the current account
   const [items, setItems] = useState([]);
   const [challenge, setChallenge] = useState(null); // 오늘의 AI 챌린지
@@ -29,6 +33,7 @@ export default function Leaderboard() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(false); // false | {edit?: entry}
   const loadRef = useRef(null);
+  const focusedRegistrationRef = useRef(false);
 
   async function load() {
     try {
@@ -59,6 +64,15 @@ export default function Leaderboard() {
     const t = setInterval(() => setRemain((r) => (r > 0 ? r - 1 : 0)), 1000);
     return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    if (!registeredId || focusedRegistrationRef.current) return;
+    if (!items.some((entry) => entry.id === registeredId)) return;
+    focusedRegistrationRef.current = true;
+    const row = document.getElementById(`leaderboard-entry-${registeredId}`);
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    row?.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+    row?.focus({ preventScroll: true });
+  }, [items, registeredId]);
 
   async function vote(id, value) {
     try {
@@ -89,7 +103,7 @@ export default function Leaderboard() {
 
   async function unlock(entry) {
     if (!isLoggedIn()) {
-      navigate("/login?mode=signup");
+      navigate("/login?mode=signup&next=%2Fleaderboard");
       return;
     }
     setError("");
@@ -109,128 +123,148 @@ export default function Leaderboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-lg font-semibold">🏆 오늘의 리더보드</h2>
-        <SimBadge />
-      </div>
+      <PageHeader
+        eyebrow="매일 KST 00:00 초기화"
+        title="오늘의 리더보드"
+        description="실시간 모의(페이퍼) 수익률과 좋아요로 겨루는 오늘의 보드예요. 좋아요·수익률은 참고용이고 매수 추천이 아니에요."
+        actions={<SimBadge className="lg:hidden" />}
+      />
+
+      {justRegistered ? (
+        <div className="notice-good mb-5 t-small text-slate-700" role="status">
+          등록을 완료했어요. 같은 설정으로 모의 수익률 집계를 시작했어요.
+        </div>
+      ) : null}
 
       {/* countdown + register */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 rounded-2xl bg-surface border border-slate-200 px-5 py-4">
-        <div className="text-sm text-slate-700">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6 pb-4 border-b border-slate-200">
+        <div className="t-small text-slate-700">
           리더보드 초기화까지{" "}
-          <span className="font-bold tabular-nums text-amber-700">{fmtCountdown(remain)}</span>{" "}
+          <span className="t-title num text-slate-900">{fmtCountdown(remain)}</span>{" "}
           <span className="text-slate-500">남음 (매일 KST 00:00 초기화)</span>
         </div>
-        <button
-          onClick={() => setModal({})}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white"
-        >
-          + 나만의 매크로 등록
+        <button onClick={() => navigate("/builder?guide=1")} className="btn btn-m btn-primary">
+          매크로 만들기
         </button>
       </div>
 
       {challenge?.active && challenge.symbol && (
-        <div className="mb-4 rounded-2xl bg-indigo-600 px-5 py-4 shadow">
-          <div className="text-sm text-white">
-            🤖 <b>오늘의 AI 챌린지</b> — AI가 <b>{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요. 나만의 매크로를 등록해 수익률을 경쟁해 보아요.
+        <div className="notice mb-4">
+          <div className="t-small text-slate-700">
+            <b className="text-slate-900">오늘의 AI 챌린지</b> — AI가 <b className="text-slate-900">{challenge.symbol.replace(/USDT$/, "")}</b>로 짠 매크로 3개가 리더보드에 있어요. 나만의 매크로를 등록해 수익률을 겨뤄봐요.
           </div>
         </div>
       )}
 
-      <p className="text-sm text-slate-500 mb-4">
-        실시간 <b>모의(페이퍼)</b> 수익률과 좋아요로 겨루는 오늘의 보드입니다. 좋아요·수익률은 참고용이며 매수 추천/신호가 아닙니다.
-      </p>
-
-      {busy && <div className="text-slate-500">불러오는 중…</div>}
-      {error && <div className="text-red-600">오류: {error}</div>}
+      {busy && <Loading />}
+      {error && <ErrorNote>오류: {error}</ErrorNote>}
       {!busy && items.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
-          아직 등록된 매크로가 없습니다. <b>+ 나만의 매크로 등록</b>으로 첫 주자가 되어보세요.
-        </div>
+        <EmptyState title="아직 등록된 매크로가 없어요">
+          위 <b className="text-slate-900">매크로 만들기</b>에서 조건을 정하고 결과를 확인한 뒤 등록할 수 있어요.
+        </EmptyState>
       )}
 
-      <div className="space-y-3">
+      {/* board-row: 카드 대신 캔버스 위 괘선 리스트. 순위+아바타+이름/설명 스택,
+          1위만 아바타를 브랜드색으로 채우고 순위 숫자를 강조색으로 뒤집는다. */}
+      <div>
         {items.map((e, idx) => {
           const r = ret(e);
+          const first = idx === 0;
+          const initial = (e.username || e.nickname || "?").charAt(0);
           return (
-            <div key={e.id} className="rounded-2xl bg-surface border border-slate-200 p-3 sm:p-4 flex items-center gap-2 sm:gap-4 flex-wrap">
-              <div className="w-6 sm:w-8 shrink-0 text-center text-lg font-bold text-slate-500">{idx + 1}</div>
+            <div
+              key={e.id}
+              id={`leaderboard-entry-${e.id}`}
+              tabIndex={registeredId === e.id ? -1 : undefined}
+              className={
+                "py-4 border-b border-slate-200 last:border-0 flex items-center gap-3 sm:gap-4 flex-wrap " +
+                (registeredId === e.id ? "border-l-2 border-l-brand pl-3" : "")
+              }
+            >
+              <div className={"w-6 shrink-0 text-center t-h4 num " + (first ? "text-slate-900" : "text-slate-600")}>{idx + 1}</div>
+              <div className={"w-9 h-9 shrink-0 rounded-full grid place-items-center t-label font-bold " + (first ? "bg-brand text-brand-ink" : "bg-slate-100 text-slate-700")}>{initial}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
-                  {e.crown && <span title="인기 셀러 (판매·좋아요 상위)">👑</span>}
+                  {e.crown && <span className="badge badge-flat" title="판매·좋아요 상위">인기 셀러</span>}
                   {/* AI bots carry their own numbered name (껄무새1호기봇 …) — use
                       the stored username rather than a hardcoded label. */}
-                  <span className="font-semibold text-slate-900 truncate">{e.username || e.nickname}</span>
-                  {e.is_ai && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-300 font-bold">🤖 AI</span>}
-                  {(e.is_owner || e.is_mine) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-300">내 것</span>}
+                  <span className="t-title text-slate-900 truncate">{e.username || e.nickname}</span>
+                  {e.is_ai && <span className="badge badge-ai">AI</span>}
+                  {(e.is_owner || e.is_mine) && <span className="badge badge-mine">내 것</span>}
                   {e.macro?.leverage > 1 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 border border-red-300 font-bold" title="고위험 레버리지 전략">
-                      ⚠️ {e.macro.leverage}배
+                    <span className="badge badge-risk" title="고위험 레버리지 전략">
+                      고위험 · {e.macro.leverage}배
                     </span>
                   )}
-                  <span className="text-xs text-slate-500">· 오늘 {e.created_kst} 등록</span>
+                  <span className="t-caption text-slate-500">· 오늘 {e.created_kst} 등록</span>
                 </div>
                 {e.locked ? (
-                  <div className="text-sm text-slate-400 truncate">🔒 잠김 — 언락하면 전략·매크로가 공개돼요</div>
+                  <div className="mt-1 t-small text-slate-500 truncate">잠김 · 언락하면 전략과 설정이 공개돼요</div>
                 ) : (
-                  <div className="text-sm text-slate-700 truncate">{e.human_summary}</div>
+                  <div className="mt-1 t-small text-slate-700 truncate">{e.human_summary}</div>
                 )}
               </div>
 
-              <div className={"w-20 sm:w-24 shrink-0 text-right text-lg sm:text-xl font-bold tabular-nums " + r.cls}>{r.text}</div>
+              <div className={"w-24 shrink-0 text-right t-h4 num " + r.cls}>{r.text}</div>
 
               {/* Five action buttons never fit beside the summary on a phone —
-                  give them their own full-width row below it. */}
-              <div className="flex items-center gap-1 flex-wrap w-full sm:w-auto justify-end">
+                  give them their own full-width row below it.
+                  투표는 다중 선택이 아닌 토글이라 chip 규격을 쓰되, 상승/하락색으로
+                  채우지 않는다(§2-1: 등락색은 글자 색으로만). */}
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
                 <button
                   onClick={() => vote(e.id, 1)}
-                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === 1 ? "bg-green-600 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
+                  className={"chip num " + (e.my_vote === 1 ? "border-slate-300 bg-slate-100 text-slate-900" : "")}
                   title="좋아요"
+                  aria-pressed={e.my_vote === 1}
                 >
-                  👍 {e.likes}
+                  좋아요 {e.likes}
                 </button>
                 <button
                   onClick={() => vote(e.id, -1)}
-                  className={"px-2 py-1 rounded-lg text-sm " + (e.my_vote === -1 ? "bg-danger text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700")}
+                  className={"chip num " + (e.my_vote === -1 ? "border-slate-300 bg-slate-100 text-slate-900" : "")}
                   title="싫어요"
+                  aria-pressed={e.my_vote === -1}
                 >
-                  👎 {e.dislikes}
+                  싫어요 {e.dislikes}
                 </button>
                 {e.locked ? (
+                  // 행마다 노란 버튼을 두면 화면에 노랑이 열 개가 된다 —
+                  // 페이지의 primary 는 상단 '등록' 하나뿐이라 여기는 secondary.
                   <button
                     onClick={() => unlock(e)}
                     disabled={unlocking === e.id}
-                    className="px-3 py-1 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white"
+                    className="btn btn-s btn-secondary font-bold"
                     title="포인트를 써서 매크로 공개+복사 (창작자에게 70% 적립)"
                   >
-                    {unlocking === e.id ? "여는 중…" : `🔓 ${e.unlock_price}P`}
+                    {unlocking === e.id ? "여는 중…" : <>언락 <span className="num">{e.unlock_price}P</span></>}
                   </button>
                 ) : (
                   <button
                     onClick={() => copyToBuilder(e)}
-                    className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    className="btn btn-s btn-secondary"
                     title="이 매크로를 빌더로 복사"
                   >
-                    📋 복사
+                    빌더로 복사
                   </button>
                 )}
                 {(e.is_owner || (e.is_mine && !e.for_sale)) && (
                   <button
                     onClick={() => setModal({ edit: e })}
-                    className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    className="btn btn-s btn-secondary"
                     title={e.is_owner ? "내 매크로 수정" : "비밀번호 확인 후 수정"}
                   >
-                    ✏ 수정
+                    수정
                   </button>
                 )}
                 {e.is_owner && (
                   <button
                     onClick={() => remove(e)}
                     disabled={deleting === e.id}
-                    className="px-2 py-1 rounded-lg text-sm bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 disabled:opacity-40"
+                    className="btn btn-s btn-secondary text-red-600 hover:text-red-700"
                     title="내 매크로 삭제"
                   >
-                    {deleting === e.id ? "삭제 중…" : "🗑 삭제"}
+                    {deleting === e.id ? "삭제 중…" : "삭제"}
                   </button>
                 )}
               </div>

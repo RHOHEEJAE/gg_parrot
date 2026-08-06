@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../lib/auth.js";
+import { PageHeader, EmptyState, Loading, ErrorNote } from "../components/Page.jsx";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -14,6 +15,13 @@ function Composer({ onCreated, onCancel }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview]
+  );
+
   function pickImage(e) {
     setErr("");
     const f = e.target.files?.[0];
@@ -23,11 +31,15 @@ function Composer({ onCreated, onCancel }) {
       return;
     }
     if (!["image/jpeg", "image/png"].includes(f.type)) {
+      setImage(null);
+      setPreview("");
       setErr("JPG 또는 PNG 이미지만 올릴 수 있어요.");
       e.target.value = "";
       return;
     }
     if (f.size > MAX_IMAGE_BYTES) {
+      setImage(null);
+      setPreview("");
       setErr("이미지는 2MB 이하만 올릴 수 있어요.");
       e.target.value = "";
       return;
@@ -50,55 +62,59 @@ function Composer({ onCreated, onCancel }) {
     }
   }
 
+  // 폼은 §1-3 이 상자를 허용하는 예외 — 목록 위로 끼어들어 오는 것이라
+  // 끼어든 것처럼 보여야 한다.
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-5 space-y-3">
-      <div className="font-semibold text-slate-800">✍️ 새 글 쓰기</div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="제목"
-        maxLength={120}
-        className="w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="내용을 입력하세요"
-        rows={6}
-        maxLength={5000}
-        className="w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-      />
+    <div className="form-surface border border-slate-200 p-5 space-y-4">
+      <h2 className="t-title text-slate-900">새 글 쓰기</h2>
+      <label className="block">
+        <span className="block t-small font-semibold text-slate-700 mb-2">제목</span>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={120}
+          className="field"
+        />
+      </label>
+      <label className="block">
+        <span className="block t-small font-semibold text-slate-700 mb-2">내용</span>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+          maxLength={5000}
+          className="field"
+        />
+      </label>
       <div className="flex items-center gap-3 flex-wrap">
-        <label className="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-          <span className="rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 px-3 py-1.5">📷 사진 첨부</span>
+        <label className="inline-flex items-center gap-2 cursor-pointer">
+          <span className="btn btn-s btn-secondary">사진 첨부</span>
           <input type="file" accept="image/png,image/jpeg" onChange={pickImage} className="hidden" />
-          <span className="text-xs text-slate-400">JPG·PNG · 2MB 이하</span>
+          <span className="t-caption text-slate-500">JPG·PNG · 2MB 이하</span>
         </label>
       </div>
       {preview && (
         <div className="relative inline-block">
-          <img src={preview} alt="미리보기" className="max-h-48 rounded-lg border border-slate-200" />
+          <img src={preview} alt="미리보기" className="max-h-48 rounded-xl border border-slate-200" />
+          {/* slate-900/50 은 두 테마에서 서로 뒤집히는 짝 — 다크에서도 대비가 유지된다. */}
           <button
             onClick={() => {
               setImage(null);
               setPreview("");
             }}
-            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-800 text-white text-xs"
+            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-900 text-slate-50 t-caption font-bold"
+            aria-label="첨부 이미지 지우기"
           >
             ✕
           </button>
         </div>
       )}
-      {err && <div className="text-sm text-red-600">{err}</div>}
+      {err && <div className="t-small text-red-600" role="alert">{err}</div>}
       <div className="flex items-center gap-2">
-        <button
-          onClick={submit}
-          disabled={busy}
-          className="rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 px-5 py-2 text-sm font-bold text-white"
-        >
+        <button onClick={submit} disabled={busy} className="btn btn-l btn-primary">
           {busy ? "등록 중…" : "등록"}
         </button>
-        <button onClick={onCancel} className="rounded-lg bg-slate-200 hover:bg-slate-300 px-4 py-2 text-sm">
+        <button onClick={onCancel} className="btn btn-l btn-secondary">
           취소
         </button>
       </div>
@@ -112,22 +128,19 @@ function Pager({ page, pages, onGo }) {
   const from = Math.max(1, page - 2);
   const to = Math.min(pages, from + 4);
   for (let i = from; i <= to; i++) nums.push(i);
-  const btn = "min-w-[34px] rounded-lg border px-2 py-1 text-sm ";
+  // 페이지 번호는 단일 선택이지만 개수가 유동적이라 chip 규격을 쓴다(§6 chip).
+  const btn = "chip justify-center min-w-[34px] num disabled:opacity-30 ";
   return (
-    <div className="flex items-center justify-center gap-1.5 mt-6 flex-wrap">
-      <button disabled={page <= 1} onClick={() => onGo(page - 1)} className={btn + "border-slate-300 disabled:opacity-30"}>
+    <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
+      <button disabled={page <= 1} onClick={() => onGo(page - 1)} className={btn}>
         ‹
       </button>
       {nums.map((n) => (
-        <button
-          key={n}
-          onClick={() => onGo(n)}
-          className={btn + (n === page ? "border-indigo-600 bg-indigo-600 text-white font-semibold" : "border-slate-300 hover:bg-slate-100")}
-        >
+        <button key={n} onClick={() => onGo(n)} className={btn + (n === page ? "chip-on" : "")}>
           {n}
         </button>
       ))}
-      <button disabled={page >= pages} onClick={() => onGo(page + 1)} className={btn + "border-slate-300 disabled:opacity-30"}>
+      <button disabled={page >= pages} onClick={() => onGo(page + 1)} className={btn}>
         ›
       </button>
     </div>
@@ -165,28 +178,29 @@ export default function Board() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">💬 껄무새 게시판</h1>
-          <p className="text-sm text-slate-500 mt-0.5">코린이끼리 전략·질문·정보를 나눠요. (투자 조언 아님)</p>
-        </div>
-        {token ? (
-          <button
-            onClick={() => setComposing((v) => !v)}
-            className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-bold text-white"
-          >
-            {composing ? "닫기" : "✍️ 새 글 쓰기"}
-          </button>
-        ) : (
-          <button
-            onClick={() => navigate("/login")}
-            className="rounded-lg bg-slate-200 hover:bg-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-            title="글쓰기는 로그인 후 이용할 수 있어요"
-          >
-            🔒 로그인하고 글쓰기
-          </button>
-        )}
-      </div>
+      <PageHeader
+        eyebrow="전략·질문·정보"
+        title="껄무새 게시판"
+        description="코린이끼리 전략·질문·정보를 나눠요. (투자 조언 아님)"
+        actions={
+          token ? (
+            <button
+              onClick={() => setComposing((v) => !v)}
+              className={"btn btn-m " + (composing ? "btn-secondary" : "btn-primary")}
+            >
+              {composing ? "닫기" : "새 글 쓰기"}
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate("/login?next=%2Fboard")}
+              className="btn btn-m btn-secondary"
+              title="글쓰기는 로그인 후 이용할 수 있어요"
+            >
+              로그인하고 글쓰기
+            </button>
+          )
+        }
+      />
 
       {composing && token && (
         <div className="mb-5">
@@ -200,34 +214,32 @@ export default function Board() {
         </div>
       )}
 
-      {busy && <div className="text-slate-400">불러오는 중…</div>}
-      {err && <div className="text-red-600 text-sm">오류: {err}</div>}
+      {busy && <Loading />}
+      {err && <ErrorNote>오류: {err}</ErrorNote>}
 
       {data && (
         <>
           {data.items.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
-              아직 글이 없어요. 첫 글을 남겨보세요!
-            </div>
+            <EmptyState title="아직 글이 없어요">첫 글을 남겨봐요.</EmptyState>
           ) : (
-            <ul className="divide-y divide-slate-100 rounded-2xl bg-surface border border-slate-200">
+            <ul className="divide-y divide-slate-200 border-t border-slate-200">
               {data.items.map((p) => (
                 <li key={p.id}>
-                  <Link to={`/board/${p.id}`} className="block px-5 py-4 hover:bg-slate-50">
+                  <Link to={`/board/${p.id}`} className="block py-4 px-2 -mx-2 rounded-lg hover:bg-slate-100">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 truncate">
-                          {p.has_image && <span className="mr-1">📷</span>}
+                        <div className="t-title text-slate-900 truncate">
+                          {p.has_image && <span className="badge badge-flat mr-2">사진</span>}
                           {p.title}
                           {p.comment_count > 0 && (
-                            <span className="ml-1.5 text-xs font-bold text-indigo-600">[{p.comment_count}]</span>
+                            <span className="ml-2 t-caption font-bold num text-indigo-800">[{p.comment_count}]</span>
                           )}
                         </div>
-                        {p.snippet && <div className="text-sm text-slate-500 truncate mt-0.5">{p.snippet}</div>}
+                        {p.snippet && <div className="t-small text-slate-500 truncate mt-1">{p.snippet}</div>}
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-xs text-slate-600 font-medium">{p.author_name}</div>
-                        <div className="text-[11px] text-slate-400">{p.created_kst}</div>
+                        <div className="t-caption text-slate-700">{p.author_name}</div>
+                        <div className="t-caption text-slate-500 num">{p.created_kst}</div>
                       </div>
                     </div>
                   </Link>
@@ -236,7 +248,7 @@ export default function Board() {
             </ul>
           )}
           <Pager page={data.page} pages={data.pages} onGo={go} />
-          <p className="mt-4 text-[11px] text-slate-400 text-center">{data.disclaimer}</p>
+          <p className="mt-4 t-caption text-slate-500 text-center">{data.disclaimer}</p>
         </>
       )}
     </div>

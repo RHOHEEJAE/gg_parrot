@@ -11,8 +11,8 @@ const POLL_MS = Number(import.meta.env?.VITE_FEARGREED_POLL_MS) || 600000; // 10
 function tone(v) {
   if (v == null) return { text: "text-slate-700", bar: "bg-slate-400" };
   if (v < 25) return { text: "text-red-600", bar: "bg-red-500" };
-  if (v < 45) return { text: "text-amber-600", bar: "bg-amber-500" };
-  if (v < 55) return { text: "text-slate-600", bar: "bg-slate-400" };
+  if (v < 45) return { text: "text-amber-700", bar: "bg-amber-500" };
+  if (v < 55) return { text: "text-slate-700", bar: "bg-slate-400" };
   if (v < 75) return { text: "text-green-600", bar: "bg-green-600" };
   return { text: "text-green-700", bar: "bg-green-600" };
 }
@@ -46,9 +46,9 @@ export default function FearGreedBanner() {
   if (!data || !data.ok || data.value == null) {
     if (failed && data && !data.ok) {
       return (
-        <div className="border-b border-slate-200 bg-slate-100">
-          <div className="max-w-6xl mx-auto px-4 py-1.5 text-xs text-slate-500">
-            😶 공포·탐욕 지수 정보 없음 (잠시 후 다시 시도)
+        <div className="border-b border-slate-200">
+          <div className="max-w-6xl mx-auto px-5 sm:px-6 py-2 t-caption text-slate-500">
+            공포·탐욕 지수 정보 없음 (잠시 후 다시 시도)
           </div>
         </div>
       );
@@ -60,26 +60,26 @@ export default function FearGreedBanner() {
   const t = tone(v);
 
   return (
-    <div className="border-b border-slate-200 bg-slate-100">
-      <div className="max-w-6xl mx-auto px-4 py-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+    <div className="border-b border-slate-200">
+      <div className="max-w-6xl mx-auto px-5 sm:px-6 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 t-caption">
         <span className="flex items-center font-semibold text-slate-700">
-          😱 공포·탐욕 지수
+          공포·탐욕 지수
           <InfoTooltip term="fear_greed" placement="bottom" />
         </span>
 
-        <span className={"font-bold tabular-nums " + t.text}>{v}</span>
-        <span className={"text-xs font-semibold " + t.text}>{data.classification_ko}</span>
+        <span className={"t-label font-bold num " + t.text}>{v}</span>
+        <span className={"font-semibold " + t.text}>{data.classification_ko}</span>
 
         {/* 0~100 mini gauge */}
-        <span className="hidden sm:inline-block w-28 h-1.5 rounded-full bg-slate-300 overflow-hidden align-middle">
+        <span className="hidden sm:inline-block w-28 h-1.5 rounded-full bg-slate-200 overflow-hidden align-middle">
           <span className={"block h-full " + t.bar} style={{ width: `${Math.max(2, Math.min(v, 100))}%` }} />
         </span>
 
-        <span className="text-slate-400 text-xs">시장 전체 기준 (종목별 아님)</span>
-        {data.stale && <span className="text-amber-600 text-xs">(최신 갱신 실패, 이전 값)</span>}
+        <span className="text-slate-500">시장 전체 기준 (종목별 아님)</span>
+        {data.stale && <span className="font-semibold text-amber-700">(최신 갱신 실패, 이전 값)</span>}
 
-        <span className="text-slate-400 text-xs ml-auto hidden md:inline">
-          0 공포 ↔ 100 탐욕 · 참고용 (매매 신호 아님)
+        <span className="text-slate-500 ml-auto hidden md:inline">
+          <span className="num">0</span> 공포 ↔ <span className="num">100</span> 탐욕 · 참고용 (매매 신호 아님)
         </span>
       </div>
     </div>

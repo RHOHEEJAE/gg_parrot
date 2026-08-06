@@ -1,19 +1,62 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Builder from "./Builder.jsx";
 import { api } from "../api.js";
-import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
+import { RULE_TYPES, buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
 import { getUserId } from "../lib/user.js";
-import { useAuth } from "../lib/auth.js";
+import { clearAuth, useAuth } from "../lib/auth.js";
+import { lockBodyScroll } from "../lib/bodyScrollLock.js";
+import { saveRegistrationDraft } from "../lib/journey.js";
 
-// Popup builder.
-//  * register (default): requires login — the entry is owned by the account.
-//  * edit (editEntry set): account-owned entries authorize via the logged-in
-//    owner (no password); legacy anonymous entries verify the edit password.
-// Mount with a `key` so switching mode/entry resets the internal form state.
-export default function RegisterMacroModal({ open, onClose, onDone, editEntry = null, initialMacro = null }) {
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function MacroReview({ macro }) {
+  const strategy = RULE_TYPES[macro.rule_type]?.label || macro.rule_type;
+  const period = macro.period?.preset === "custom" ? (
+    <span className="num">{macro.period.start || "?"} ~ {macro.period.end || "?"}</span>
+  ) : (
+    { "1y": "최근 1년", "6m": "최근 6개월", "3m": "최근 3개월" }[macro.period?.preset] || macro.period?.preset
+  );
+  const rows = [
+    ["종목", <span className="num">{macro.symbols?.length ? macro.symbols.join(", ") : macro.symbol}</span>],
+    ["매매 방식", strategy],
+    ["포지션", <>{macro.position_side === "short" ? "숏" : "롱"} · <span className="num">{macro.leverage || 1}배</span></>],
+    ["테스트 기간", period],
+    ["봉 간격", <span className="num">{macro.candle_interval}</span>],
+    ["손절 기준", macro.risk?.stop_loss_pct == null ? "사용 안 함" : <span className="num">{macro.risk.stop_loss_pct}%</span>],
+  ];
+
+  return (
+    <div className="border-t border-slate-200">
+      {rows.map(([label, value]) => (
+        <div key={label} className="table-row">
+          <span className="row-label">{label}</span>
+          <span className="t-label font-bold text-slate-900 text-right">{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// New Studio registrations can use reviewOnly: the tested snapshot is shown as
+// immutable facts instead of opening a second, divergent Builder. Existing
+// entry edits retain the complete Builder and every A~K field.
+export default function RegisterMacroModal({
+  open,
+  onClose,
+  onDone,
+  editEntry = null,
+  initialMacro = null,
+  reviewOnly = false,
+  loginReturnPath = "",
+  initialMode = "live",
+  draftOrigin = "builder",
+}) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { token, user } = useAuth();
   const isEdit = !!editEntry;
   const [form, setForm] = useState(() => {
     if (isEdit && editEntry.macro) return macroToForm(editEntry.macro);
@@ -21,124 +64,230 @@ export default function RegisterMacroModal({ open, onClose, onDone, editEntry = 
     return defaultForm();
   });
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("live");
+  const [mode, setMode] = useState(() => editEntry?.mode || initialMode || "live");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const previousFocusRef = useRef(null);
+  const submittingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  const titleId = useId();
+
+  onCloseRef.current = onClose;
+  busyRef.current = busy;
+
+  const authenticated = !!token && !!user;
+  const accountOwnedEdit = isEdit && !!editEntry.is_owner;
+  const needsLogin = (!isEdit && !authenticated) || (accountOwnedEdit && !authenticated);
+  const accountEdit = accountOwnedEdit && authenticated;
+  const needsPassword = isEdit && !accountOwnedEdit;
+  const asAccount = !isEdit && authenticated;
+  const valErr = validate(form);
+  const macro = useMemo(() => buildMacro(form), [form]);
+
+  useEffect(() => {
+    if (!open) return;
+    previousFocusRef.current = document.activeElement;
+    const previousFocus = previousFocusRef.current;
+    const parentDialog = previousFocus?.closest?.('[role="dialog"]');
+    const background = parentDialog || document.getElementById("root");
+    const previousInert = background?.inert ?? false;
+    const previousAriaHidden = background?.getAttribute("aria-hidden") ?? null;
+    if (background) {
+      background.inert = true;
+      background.setAttribute("aria-hidden", "true");
+    }
+    const unlockBodyScroll = lockBodyScroll();
+    window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !busyRef.current) {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll(FOCUSABLE) || []);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialogRef.current?.contains(active) || active === dialogRef.current) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (background) {
+        background.inert = previousInert;
+        if (previousAriaHidden === null) background.removeAttribute("aria-hidden");
+        else background.setAttribute("aria-hidden", previousAriaHidden);
+      }
+      unlockBodyScroll();
+      window.requestAnimationFrame(() => previousFocus?.focus?.({ preventScroll: true }));
+    };
+  }, [open]);
 
   if (!open) return null;
 
-  const needsLogin = !isEdit && !user;                    // register requires an account
-  const accountEdit = isEdit && !!editEntry.is_owner;      // editing my own account entry (no password)
-  const needsPassword = isEdit && !accountEdit;            // legacy anonymous edit
-  const asAccount = !isEdit && !!user;                     // account register
-
-  const valErr = validate(form);
-  const inputCls =
-    "w-full rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500";
-
   async function save() {
+    if (submittingRef.current) return;
     setError("");
-    if (needsLogin) return setError("로그인 후 등록할 수 있어요.");
+    if (needsLogin) return setError(isEdit ? "로그인 후 수정할 수 있어요." : "로그인 후 등록할 수 있어요.");
     if (needsPassword && !password) return setError("비밀번호를 입력하세요.");
     if (valErr) return setError(valErr);
+    submittingRef.current = true;
     setBusy(true);
     try {
-      const macro = buildMacro(form);
       if (isEdit) {
-        const d = await api.leaderboardEdit(editEntry.id, macro, accountEdit ? "" : password, mode);
-        onDone?.(d.entry);
+        const data = await api.leaderboardEdit(editEntry.id, macro, accountEdit ? "" : password, mode);
+        await onDone?.(data.entry);
       } else {
-        // Logged in -> token attached; backend uses the account as owner.
-        const d = await api.leaderboardRegister(macro, user.username, "", getUserId(), mode);
-        onDone?.(d.entry);
+        const data = await api.leaderboardRegister(macro, user.username, "", getUserId(), mode);
+        await onDone?.(data.entry);
       }
       onClose();
-    } catch (e) {
-      setError(String(e.message || e));
+    } catch (reason) {
+      if (reason.status === 401 && !isEdit && initialMacro) {
+        saveRegistrationDraft(initialMacro, {
+          origin: draftOrigin,
+          mode,
+          returnTo: loginReturnPath,
+        });
+        clearAuth();
+        const next = loginReturnPath || "/builder?guide=1&register=1";
+        navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+        return;
+      }
+      setError(String(reason.message || reason));
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   }
 
+  function continueToLogin() {
+    if (initialMacro) {
+      saveRegistrationDraft(initialMacro, {
+        origin: draftOrigin,
+        mode,
+        returnTo: loginReturnPath,
+      });
+    }
+    const next = initialMacro
+      ? loginReturnPath || "/builder?guide=1&register=1"
+      : location.pathname + location.search;
+    const modeQuery = isEdit ? "" : "mode=signup&";
+    navigate(`/login?${modeQuery}next=${encodeURIComponent(next)}`);
+  }
+
   const modeSelect = (
     <label className="block">
-      <span className="text-sm text-slate-700 mb-1 block">페이퍼 모드</span>
-      <select className={inputCls} value={mode} onChange={(e) => setMode(e.target.value)}>
-        <option value="live">실시간(live)</option>
-        <option value="replay">데모 리플레이</option>
+      <span className="t-small font-semibold text-slate-700 mb-2 block">모의매매 방식</span>
+      <select className="field" value={mode} onChange={(event) => setMode(event.target.value)}>
+        <option value="live">지금 시세로 집계</option>
+        <option value="replay">최근 시세 빠르게 재생</option>
       </select>
     </label>
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-2 sm:p-4 bg-black/60 overflow-y-auto">
-      <div className="w-full max-w-2xl my-4 sm:my-8 rounded-2xl bg-surface border border-slate-300 shadow-2xl">
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200 sticky top-0 bg-surface rounded-t-2xl z-10">
-          <h3 className="text-lg font-semibold">{isEdit ? "매크로 수정" : "나만의 매크로 등록"}</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 text-xl leading-none" aria-label="닫기">✕</button>
+  const title = isEdit ? "매크로 수정" : reviewOnly ? "이 설정으로 등록" : "리더보드에 등록";
+
+  return createPortal(
+    <div className="scrim fixed inset-x-0 bottom-0 top-16 z-[80] flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="dialog w-full max-w-2xl my-4 sm:my-8"
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-surface rounded-t-[20px] z-10">
+          <h2 id={titleId} className="t-h4 text-slate-900">{title}</h2>
+          <button ref={closeButtonRef} onClick={onClose} disabled={busy}
+            className="btn btn-s btn-ghost text-xl leading-none" aria-label="닫기">×</button>
         </div>
 
-        <div className="px-4 sm:px-6 py-5 space-y-5">
+        <div className="px-6 py-6 space-y-5">
           {needsLogin ? (
-            <div className="rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-4 text-center">
-              <div className="text-sm text-indigo-900 mb-3">
-                매크로 등록은 <b>로그인한 계정</b>으로만 할 수 있어요. 내 계정으로 등록하면 남이 언락할 때 포인트가 적립돼요.
-              </div>
-              <button
-                onClick={() => navigate("/login")}
-                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2 text-sm font-bold text-white"
-              >
-                로그인 / 회원가입
+            <div className="py-5">
+              <div className="t-title text-slate-900">{isEdit ? "수정하려면 다시 로그인해요" : "등록할 때 계정이 필요해요"}</div>
+              <p className="mt-2 t-small text-slate-700 measure">
+                {isEdit
+                  ? "계정 소유 매크로는 로그인 상태에서만 수정할 수 있어요. 로그인한 뒤 리더보드에서 다시 열어 주세요."
+                  : "테스트한 설정은 이 브라우저에 잠시 보관해요. 가입하거나 로그인한 뒤 이 등록 화면으로 돌아와요."}
+              </p>
+              <button onClick={continueToLogin} className="mt-5 btn btn-l btn-primary">
+                {isEdit ? "로그인하기" : "로그인하거나 가입하기"}
               </button>
             </div>
-          ) : accountEdit || asAccount ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-              <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2 text-sm text-indigo-900">
-                👤 <b>@{user.username}</b> 계정{accountEdit ? "의 매크로를 수정해요." : "으로 등록돼요. 남이 언락하면 포인트 70% 적립."}
-              </div>
-              {modeSelect}
-            </div>
           ) : (
-            // legacy anonymous edit — password required
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="block">
-                  <span className="text-sm text-slate-700 mb-1 block">아이디</span>
-                  <input className={inputCls + " opacity-60"} value={editEntry.username || ""} disabled />
-                </label>
-                <label className="block">
-                  <span className="text-sm text-slate-700 mb-1 block">비밀번호</span>
-                  <input className={inputCls} type="password" value={password}
-                    placeholder="수정하려면 비밀번호" onChange={(e) => setPassword(e.target.value)} />
-                </label>
-                {modeSelect}
-              </div>
-              <p className="text-xs text-amber-700">⚠ 예전 방식(비밀번호)으로 등록된 엔트리예요.</p>
+              {accountEdit || asAccount ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-end">
+                  <div className="notice t-small text-slate-700">
+                    <b className="text-slate-900">{user.username}</b> 계정으로 {accountEdit ? "수정해요." : "등록해요. 남이 언락하면 포인트 70%가 적립돼요."}
+                  </div>
+                  {modeSelect}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <label className="block">
+                      <span className="t-small font-semibold text-slate-700 mb-2 block">아이디</span>
+                      <input className="field opacity-40" value={editEntry.username || ""} disabled />
+                    </label>
+                    <label className="block">
+                      <span className="t-small font-semibold text-slate-700 mb-2 block">비밀번호</span>
+                      <input className="field" type="password" value={password}
+                        placeholder="수정 비밀번호" onChange={(event) => setPassword(event.target.value)} />
+                    </label>
+                    {modeSelect}
+                  </div>
+                  <p className="t-caption text-amber-700">이 엔트리는 예전 비밀번호 방식으로 등록됐어요.</p>
+                </>
+              )}
+
+              {reviewOnly ? <MacroReview macro={macro} /> : <Builder form={form} setForm={setForm} />}
+
+              {valErr ? <div className="t-small text-amber-700" role="alert">{valErr}</div> : null}
+              <p className="t-caption text-slate-500">
+                등록하면 이 설정으로 모의매매가 시작되고 오늘 자정까지 수익률이 집계돼요. 실제 주문은 보내지 않아요.
+              </p>
             </>
           )}
 
-          {!needsLogin && <Builder form={form} setForm={setForm} />}
-
-          {valErr && !needsLogin && <div className="text-sm text-amber-700">{valErr}</div>}
-          {error && <div className="text-sm text-red-600">오류: {error}</div>}
-          {!needsLogin && (
-            <p className="text-xs text-slate-500">
-              저장하면 이 매크로로 <b>모의(페이퍼) 트레이딩</b>이 시작되고 오늘의 리더보드에 반영됩니다. 실거래가 아니며, 현물 시세가 없는 종목은 등록되지 않습니다.
-            </p>
-          )}
+          {error ? <div className="t-small text-red-600" role="alert">오류: {error}</div> : null}
         </div>
 
-        <div className="flex justify-end gap-3 px-4 sm:px-6 py-4 border-t border-slate-200 sticky bottom-0 bg-surface rounded-b-2xl">
-          <button onClick={onClose} disabled={busy} className="rounded-lg bg-slate-200 hover:bg-slate-300 px-5 py-2.5 font-semibold disabled:opacity-40">
-            {needsLogin ? "닫기" : "취소"}
-          </button>
-          {!needsLogin && (
-            <button onClick={save} disabled={busy || !!valErr} className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 font-semibold disabled:opacity-40 text-white">
-              {busy ? "처리 중…" : isEdit ? "수정 저장" : "저장 & 등록"}
+        <div className="flex flex-col gap-2 px-6 py-4 border-t border-slate-200 sticky bottom-0 bg-surface rounded-b-[20px]">
+          {!needsLogin ? (
+            <button onClick={save} disabled={busy || !!valErr} className="btn btn-l btn-primary w-full">
+              {busy ? "처리 중…" : isEdit ? "수정 저장" : "이 설정으로 등록"}
             </button>
-          )}
+          ) : null}
+          <button onClick={onClose} disabled={busy} className="btn btn-l btn-secondary w-full">
+            {needsLogin ? "나중에 등록" : isEdit ? "수정 취소" : "설정으로 돌아가기"}
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
