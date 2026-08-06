@@ -15,7 +15,9 @@ async function req(path, opts = {}) {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch (_) {}
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -33,7 +35,9 @@ async function reqForm(path, formData) {
       const body = await res.json();
       detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     } catch (_) {}
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
   }
   return res.json();
 }
@@ -172,7 +176,8 @@ export const api = {
   // paper (simulated) trading
   paperStart: (macro, symbol, mode) =>
     req("/api/paper/start", { method: "POST", body: JSON.stringify({ macro, symbol, mode }) }),
-  paperStop: (sessionId) => req(`/api/paper/${sessionId}/stop`, { method: "POST" }),
+  paperStop: (sessionId, options = {}) =>
+    req(`/api/paper/${sessionId}/stop`, { method: "POST", keepalive: !!options.keepalive }),
   paperStatus: (sessionId) => req(`/api/paper/${sessionId}`),
 
   // real-trade executable bundle (demo mockup zip). Triggers a file download.

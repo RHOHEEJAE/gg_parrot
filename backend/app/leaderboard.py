@@ -171,14 +171,19 @@ def _vote_tallies(db, entry_ids: list[int]) -> dict[int, dict]:
     return tallies
 
 
-def _live_return(session_id: Optional[int]) -> tuple[Optional[float], Optional[float], str]:
-    """(return_pct, equity, status) from the paper session, if any."""
+def _live_return(session_id: Optional[int]) -> tuple[Optional[float], Optional[float], str, str]:
+    """(return_pct, equity, status, mode) from the paper session, if any."""
     if session_id is None:
-        return None, None, "none"
+        return None, None, "none", "live"
     status = paper_mod.get_status(session_id)
     if not status:
-        return None, None, "none"
-    return status.get("current_return"), status.get("current_equity"), status.get("status", "unknown")
+        return None, None, "none", "live"
+    return (
+        status.get("current_return"),
+        status.get("current_equity"),
+        status.get("status", "unknown"),
+        status.get("mode", "live"),
+    )
 
 
 def _entry_view(
@@ -190,7 +195,7 @@ def _entry_view(
     unlocked_ids: frozenset = frozenset(),
     crown_owner_ids: frozenset = frozenset(),
 ) -> dict:
-    ret, equity, pstatus = _live_return(row.paper_session_id)
+    ret, equity, pstatus, mode = _live_return(row.paper_session_id)
     likes = tally.get("likes", 0)
     dislikes = tally.get("dislikes", 0)
     my_vote = tally.get("by_user", {}).get(viewer_id, 0)
@@ -223,6 +228,7 @@ def _entry_view(
         "return_pct": ret,
         "equity": equity,
         "paper_status": pstatus,
+        "mode": mode,
         "paper_session_id": row.paper_session_id,
         "likes": likes,
         "dislikes": dislikes,

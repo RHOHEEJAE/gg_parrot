@@ -3,12 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth } from "../lib/auth.js";
 
-// Themed input surface. `bg-white` must NOT be used here: it is Tailwind's
-// literal white, while `text-slate-900` flips to near-white under `.dark`
-// (see index.css) — the pair rendered invisible text in dark mode.
-const commentInputCls =
-  "rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm text-slate-900 " +
-  "placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500";
+// §6 text-field 규격. `bg-white` 를 쓰면 안 된다: Tailwind 의 리터럴 흰색이라
+// `.dark` 에서 near-white 로 뒤집히는 text-slate-900 과 겹쳐 글자가 사라진다.
+const commentInputCls = "field field-sm";
 
 // 댓글 작성 — 리더보드 채팅처럼 계정 없이 '일회성 이름+비밀번호'를 매번 입력.
 function CommentForm({ postId, onAdded }) {
@@ -39,10 +36,11 @@ function CommentForm({ postId, onAdded }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+    <form onSubmit={submit} className="pt-4 border-t border-slate-200 space-y-2">
       <div className="flex gap-2">
         <input
           value={username}
+          aria-label="댓글 작성자 이름"
           onChange={(e) => setUsername(e.target.value)}
           placeholder="이름"
           maxLength={24}
@@ -51,6 +49,7 @@ function CommentForm({ postId, onAdded }) {
         <input
           type="password"
           value={password}
+          aria-label="댓글 삭제용 비밀번호"
           onChange={(e) => setPassword(e.target.value)}
           placeholder="비밀번호(삭제용)"
           className={"w-1/2 " + commentInputCls}
@@ -58,20 +57,17 @@ function CommentForm({ postId, onAdded }) {
       </div>
       <textarea
         value={text}
+        aria-label="댓글 내용"
         onChange={(e) => setText(e.target.value)}
-        placeholder="댓글을 입력하세요"
+        placeholder="댓글을 입력해요"
         rows={2}
         maxLength={500}
         className={"w-full " + commentInputCls}
       />
-      {err && <div className="text-xs text-red-600">{err}</div>}
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] text-slate-400">계정 없이 남길 수 있어요 · 비밀번호는 삭제할 때만 필요</span>
-        <button
-          type="submit"
-          disabled={busy}
-          className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-1.5 text-sm font-bold text-brand-ink"
-        >
+      {err && <div className="t-caption text-red-600" role="alert">{err}</div>}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="t-caption text-slate-500">계정 없이 남길 수 있어요 · 비밀번호는 지울 때만 필요해요</span>
+        <button type="submit" disabled={busy} className="btn btn-m btn-primary">
           {busy ? "등록 중…" : "댓글 등록"}
         </button>
       </div>
@@ -99,30 +95,32 @@ function Comment({ c, onDeleted }) {
   }
 
   return (
-    <div className="py-2.5">
+    <div className="py-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-slate-700">{c.username}</span>
-        <span className="text-[11px] text-slate-400">
+        <span className="t-label font-bold text-slate-900">{c.username}</span>
+        <span className="t-caption text-slate-500 num">
           {c.created_kst}
-          <button onClick={() => setConfirming((v) => !v)} className="ml-2 text-slate-400 hover:text-red-600">
+          <button onClick={() => setConfirming((v) => !v)} className="ml-2 font-semibold hover:text-red-600">
             삭제
           </button>
         </span>
       </div>
-      <div className="text-sm text-slate-800 whitespace-pre-line mt-0.5">{c.text}</div>
+      <div className="t-label font-medium text-slate-700 whitespace-pre-line mt-1">{c.text}</div>
       {confirming && (
         <div className="mt-2 flex items-center gap-2 flex-wrap">
           <input
             type="password"
             value={password}
+            aria-label="댓글 삭제 비밀번호"
             onChange={(e) => setPassword(e.target.value)}
             placeholder="작성 시 비밀번호"
-            className="min-w-0 flex-1 sm:flex-none rounded-lg bg-slate-100 border border-slate-300 px-2 py-1 text-xs text-slate-900 placeholder-slate-400"
+            className="field field-sm min-w-0 flex-1 sm:flex-none sm:w-56"
           />
-          <button onClick={remove} disabled={busy} className="rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 px-3 py-1 text-xs font-semibold text-white">
+          {/* red-600 은 다크에서 밝은 분홍이라 흰 글자가 안 읽힌다 — danger 는 채움용 별도 토큰. */}
+          <button onClick={remove} disabled={busy} className="btn btn-s btn-danger">
             삭제 확인
           </button>
-          {err && <span className="text-xs text-red-600">{err}</span>}
+          {err && <span className="t-caption text-red-600" role="alert">{err}</span>}
         </div>
       )}
     </div>
@@ -158,26 +156,26 @@ export default function BoardPost() {
     }
   }
 
-  if (err) return <div className="max-w-3xl mx-auto text-red-600">오류: {err}</div>;
-  if (!post) return <div className="max-w-3xl mx-auto text-slate-500">불러오는 중…</div>;
+  if (err) return <div className="max-w-3xl mx-auto t-small text-red-600">오류: {err}</div>;
+  if (!post) return <div className="max-w-3xl mx-auto t-small text-slate-500">불러오는 중…</div>;
 
   const isMine = user && user.id === post.author_user_id;
 
   return (
     <div className="max-w-3xl mx-auto">
-      <Link to="/board" className="text-sm text-indigo-600 hover:underline">← 목록으로</Link>
+      <Link to="/board" className="t-small font-semibold text-slate-700 hover:text-slate-900">← 목록으로</Link>
 
       <article className="mt-4 pb-5 border-b border-slate-200">
-        <h1 className="text-2xl font-bold text-slate-900">{post.title}</h1>
-        <div className="mt-1 flex items-center justify-between gap-2 flex-wrap">
-          <div className="text-sm text-slate-500">
-            {post.author_name} · {post.created_kst}
+        <h1 className="t-h2 text-slate-900">{post.title}</h1>
+        <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
+          <div className="t-small text-slate-500">
+            {post.author_name} · <span className="num">{post.created_kst}</span>
           </div>
           {isMine && (
             <button
               onClick={removePost}
               disabled={deleting}
-              className="text-xs text-slate-400 hover:text-red-600 disabled:opacity-40"
+              className="t-caption text-slate-500 hover:text-red-600 disabled:opacity-40"
             >
               {deleting ? "삭제 중…" : "글 삭제"}
             </button>
@@ -192,16 +190,16 @@ export default function BoardPost() {
           />
         )}
 
-        {post.body && <div className="mt-4 text-slate-800 whitespace-pre-line leading-relaxed">{post.body}</div>}
+        {post.body && <div className="mt-4 t-body text-slate-600 whitespace-pre-line">{post.body}</div>}
       </article>
 
       <section className="mt-6">
-        <h2 className="text-sm font-semibold text-slate-700 mb-2">
-          댓글 <span className="text-slate-400">({post.comments.length})</span>
+        <h2 className="t-title text-slate-900 mb-2">
+          댓글 <span className="text-slate-500 num">({post.comments.length})</span>
         </h2>
         <div className="divide-y divide-slate-200 border-t border-slate-200">
           {post.comments.length === 0 ? (
-            <div className="py-4 text-sm text-slate-400">첫 댓글을 남겨보세요.</div>
+            <div className="py-6 t-small text-slate-500">첫 댓글을 남겨봐요.</div>
           ) : (
             post.comments.map((c) => (
               <Comment

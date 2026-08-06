@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth, updateAuthUser } from "../lib/auth.js";
+import { PageHeader, SectionTitle, EmptyRow, Loading, ErrorNote } from "../components/Page.jsx";
 
 const P = (n) => `${(n ?? 0).toLocaleString()}P`;
 
@@ -14,19 +15,14 @@ const REASON_KO = {
 
 function Section({ title, count, children }) {
   return (
-    <section className="pt-5 border-t border-slate-200">
-      <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-[17px] font-bold tracking-tight text-slate-900">{title}</h3>
-        {count != null && <span className="text-xs text-slate-400">({count})</span>}
-      </div>
+    <section className="pt-6 border-t border-slate-200">
+      <SectionTitle count={count}>{title}</SectionTitle>
       {children}
     </section>
   );
 }
 
-function Empty({ children }) {
-  return <div className="text-sm text-slate-400 py-4 text-center">{children}</div>;
-}
+const Empty = EmptyRow;
 
 export default function MyPage() {
   const { token } = useAuth();
@@ -36,45 +32,55 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!token) {
-      navigate("/login");
+      navigate("/login?next=%2Fmypage");
       return;
     }
+    let alive = true;
     api.myDashboard()
       .then((d) => {
+        if (!alive) return;
         setData(d);
         updateAuthUser(d.user); // sync header points
       })
-      .catch((e) => setError(String(e.message || e)));
-  }, [token]);
+      .catch((e) => {
+        if (alive) setError(String(e.message || e));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [navigate, token]);
 
   if (!token) return null;
-  if (error) return <div className="text-red-600">오류: {error}</div>;
-  if (!data) return <div className="text-slate-500">불러오는 중…</div>;
+  if (error) return <ErrorNote>오류: {error}</ErrorNote>;
+  if (!data) return <Loading />;
 
   const { user, tier, totals, created, purchased, sales, ledger, my_posts = [] } = data;
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        eyebrow="계정·포인트·매크로"
+        title="내 활동"
+        description="만든 매크로와 언락한 전략, 판매 수익과 포인트 변동을 한곳에서 확인해요."
+      />
       {/* profile + tier + points */}
       <div className="pb-5 flex items-center justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-2xl">{tier.icon}</span>
-            <span className="text-xl font-bold">{user.username}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 border border-slate-300 text-slate-600">
-              {tier.name} 등급
-            </span>
+            <span className="t-h4 text-slate-900">{user.username}</span>
+            <span className="badge badge-flat">{tier.name} 등급</span>
           </div>
-          <div className="text-sm text-slate-500 mt-1">{user.email}</div>
+          <div className="t-small text-slate-700 mt-1">{user.email}</div>
           {tier.next_name && (
-            <div className="text-xs text-slate-400 mt-1">
-              다음 등급 <b>{tier.next_name}</b>까지 판매 {tier.to_next}건 남음 (누적 판매 {tier.sales}건)
+            <div className="t-caption text-slate-500 mt-1">
+              다음 등급 <b className="text-slate-700">{tier.next_name}</b>까지 판매 <span className="num">{tier.to_next}</span>건 남음 (누적 판매 <span className="num">{tier.sales}</span>건)
             </div>
           )}
         </div>
+        {/* stat — 상자 없이 캡션 위, 수치 아래. 포인트는 §2-3 에 따라 인디고. */}
         <div className="text-right">
-          <div className="text-xs text-slate-500">보유 포인트</div>
-          <div className="text-3xl font-extrabold text-amber-700">🪙 {P(user.points_balance)}</div>
+          <div className="stat-label">보유 포인트</div>
+          <div className="t-h2 num text-indigo-800">🪙 {P(user.points_balance)}</div>
         </div>
       </div>
 
@@ -87,27 +93,27 @@ export default function MyPage() {
           ["구매한 매크로", totals.purchased + "개"],
         ].map(([label, value]) => (
           <div key={label} className="min-w-0">
-            <div className="text-[13px] font-semibold text-slate-700">{label}</div>
-            <div className="text-xl font-bold num text-slate-900">{value}</div>
+            <div className="stat-label">{label}</div>
+            <div className="stat-value">{value}</div>
           </div>
         ))}
       </div>
 
       {/* created */}
-      <Section title="🛠 내가 만든 매크로" count={created.length}>
+      <Section title="내가 만든 매크로" count={created.length}>
         {created.length === 0 ? (
           <Empty>아직 리더보드에 등록한 매크로가 없어요. 빌더에서 만들어 등록해보세요.</Empty>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200">
             {created.map((m) => (
-              <div key={m.entry_id} className="flex items-center justify-between gap-3 py-2.5 flex-wrap">
+              <div key={m.entry_id} className="flex items-center justify-between gap-3 py-3 flex-wrap">
                 <div className="min-w-0">
-                  <div className="font-medium text-slate-800">{m.symbol}</div>
-                  <div className="text-xs text-slate-500 truncate">{m.human_summary}</div>
+                  <div className="t-label font-bold text-slate-900 num">{m.symbol}</div>
+                  <div className="t-small text-slate-500 truncate">{m.human_summary}</div>
                 </div>
-                <div className="text-sm text-slate-600 num">
-                  판매 <b>{m.sales}</b> · 수익 <b className="text-amber-700">{P(m.earned)}</b>
-                  <span className="text-xs text-slate-400"> · {m.created_kst}</span>
+                <div className="t-small text-slate-700">
+                  판매 <b className="num text-slate-900">{m.sales}</b> · 수익 <b className="num text-indigo-800">{P(m.earned)}</b>
+                  <span className="t-caption text-slate-500 num"> · {m.created_kst}</span>
                 </div>
               </div>
             ))}
@@ -116,51 +122,52 @@ export default function MyPage() {
       </Section>
 
       {/* my board posts */}
-      <Section title="💬 내가 쓴 게시글" count={my_posts.length}>
+      <Section title="내가 쓴 게시글" count={my_posts.length}>
         {my_posts.length === 0 ? (
           <Empty>아직 작성한 게시글이 없어요. 게시판에 첫 글을 남겨보세요.</Empty>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200">
             {my_posts.map((p) => (
-              <div
+              <button
+                type="button"
                 key={p.id}
                 onClick={() => navigate(`/board/${p.id}`)}
-                className="flex items-center justify-between gap-3 py-2.5 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg"
+                className="w-full text-left flex items-center justify-between gap-3 py-3 hover:bg-slate-100 -mx-2 px-2 rounded-lg"
               >
                 <div className="min-w-0">
-                  <div className="font-medium text-slate-800 truncate">
-                    {p.has_image && <span className="mr-1">📷</span>}
+                  <div className="t-label font-bold text-slate-900 truncate">
+                    {p.has_image && <span className="badge badge-flat mr-2">사진</span>}
                     {p.title}
-                    {p.comment_count > 0 && <span className="ml-1.5 text-xs font-bold text-indigo-600">[{p.comment_count}]</span>}
+                    {p.comment_count > 0 && <span className="ml-2 t-caption font-bold num text-indigo-800">[{p.comment_count}]</span>}
                   </div>
-                  {p.snippet && <div className="text-xs text-slate-500 truncate">{p.snippet}</div>}
+                  {p.snippet && <div className="t-small text-slate-500 truncate">{p.snippet}</div>}
                 </div>
-                <div className="text-[11px] text-slate-400 shrink-0">{p.created_kst}</div>
-              </div>
+                <div className="t-caption text-slate-500 num shrink-0">{p.created_kst}</div>
+              </button>
             ))}
           </div>
         )}
       </Section>
 
       {/* purchased */}
-      <Section title="🛒 구매한 매크로" count={purchased.length}>
+      <Section title="구매한 매크로" count={purchased.length}>
         {purchased.length === 0 ? (
           <Empty>구매(언락)한 매크로가 없어요. 리더보드에서 마음에 드는 전략을 열어보세요.</Empty>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200">
             {purchased.map((m, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-2.5 flex-wrap">
+              <div key={i} className="flex items-center justify-between gap-3 py-3 flex-wrap">
                 <div className="min-w-0">
-                  <div className="font-medium text-slate-800">{m.symbol} <span className="text-xs text-slate-400">· @{m.seller}</span></div>
-                  <div className="text-xs text-slate-500 truncate">{m.human_summary}</div>
+                  <div className="t-label font-bold text-slate-900 num">{m.symbol} <span className="t-caption text-slate-500">· @{m.seller}</span></div>
+                  <div className="t-small text-slate-500 truncate">{m.human_summary}</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-slate-500 num">-{P(m.price)}</span>
+                  <span className="t-small font-semibold text-slate-500 num">-{P(m.price)}</span>
                   <button
                     onClick={() => navigate("/builder", { state: { macro: m.macro } })}
-                    className="px-2 py-1 rounded-lg text-sm bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    className="btn btn-s btn-secondary"
                   >
-                    📋 빌더로
+                    빌더로 복사
                   </button>
                 </div>
               </div>
@@ -170,17 +177,17 @@ export default function MyPage() {
       </Section>
 
       {/* sales history */}
-      <Section title="💰 내 매크로 판매 내역" count={sales.length}>
+      <Section title="내 매크로 판매 내역" count={sales.length}>
         {sales.length === 0 ? (
           <Empty>아직 판매(다른 사람의 언락)가 없어요.</Empty>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200">
             {sales.map((s, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <div key={i} className="flex items-center justify-between gap-3 py-3 t-small">
                 <div className="text-slate-700">
-                  <b>@{s.buyer}</b> 님이 <b>{s.symbol}</b> 매크로를 언락
+                  <b className="text-slate-900">@{s.buyer}</b> 님이 <b className="text-slate-900 num">{s.symbol}</b> 매크로를 언락
                 </div>
-                <div className="text-amber-700 font-semibold num">+{P(s.earned)}</div>
+                <div className="font-bold num text-indigo-800">+{P(s.earned)}</div>
               </div>
             ))}
           </div>
@@ -188,19 +195,19 @@ export default function MyPage() {
       </Section>
 
       {/* ledger */}
-      <Section title="📒 포인트 내역" count={ledger.length}>
+      <Section title="포인트 내역" count={ledger.length}>
         {ledger.length === 0 ? (
           <Empty>포인트 변동 내역이 없어요.</Empty>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-200">
             {ledger.map((l, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <div className="text-slate-600">{REASON_KO[l.reason] || l.reason}</div>
+              <div key={i} className="flex items-center justify-between gap-3 py-3 t-small">
+                <div className="text-slate-700">{REASON_KO[l.reason] || l.reason}</div>
                 <div className="flex items-center gap-3 num">
-                  <span className={l.delta >= 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+                  <span className={"font-bold " + (l.delta >= 0 ? "text-green-600" : "text-red-600")}>
                     {l.delta >= 0 ? "+" : ""}{l.delta.toLocaleString()}P
                   </span>
-                  <span className="text-xs text-slate-400 w-16 text-right">잔액 {l.balance_after.toLocaleString()}</span>
+                  <span className="t-caption text-slate-500 w-16 text-right">잔액 {l.balance_after.toLocaleString()}</span>
                 </div>
               </div>
             ))}
@@ -208,8 +215,8 @@ export default function MyPage() {
         )}
       </Section>
 
-      <p className="text-xs text-slate-400 text-center">
-        포인트는 서비스 내 가상 재화이며, 본 서비스는 실거래/투자 자문이 아닙니다.
+      <p className="t-caption text-slate-500 text-center">
+        포인트는 서비스 안에서만 쓰는 가상 재화이고, 본 서비스는 실거래·투자 자문이 아니에요.
       </p>
     </div>
   );

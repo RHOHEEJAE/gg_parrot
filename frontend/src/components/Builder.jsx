@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { cloneElement, isValidElement, useId, useState } from "react";
 import { RULE_TYPES, PERIOD_PRESETS, CANDLE_INTERVALS, MAX_LEVERAGE, withTypeDefaults } from "../lib/macro.js";
 import InfoTooltip from "./InfoTooltip.jsx";
 import { api } from "../api.js";
@@ -13,37 +13,75 @@ const money = (v, symbol, rate) => {
 };
 
 // Live risk read-out for a chosen leverage. Price move to liquidation ≈ 100/N %.
+// 청산 경고는 '끼어드는 것'이라 §1-3 예외로 상자를 유지한다(alert).
 function leverageRisk(lev) {
   const n = Math.max(1, Math.round(Number(lev) || 1));
   if (n <= 1) return null;
   const movePct = 100 / n;
   let level, cls;
-  if (n >= 20) { level = "매우 위험"; cls = "border-red-400 bg-red-50 text-red-800"; }
-  else if (n >= 10) { level = "고위험"; cls = "border-red-300 bg-red-50 text-red-700"; }
-  else if (n >= 4) { level = "주의"; cls = "border-amber-300 bg-amber-50 text-amber-800"; }
-  else { level = "낮음"; cls = "border-amber-200 bg-amber-50 text-amber-700"; }
+  if (n >= 10) { level = n >= 20 ? "매우 위험" : "고위험"; cls = "alert-risk"; }
+  else { level = n >= 4 ? "주의" : "낮음"; cls = "alert-warn"; }
   return { n, movePct, level, cls };
 }
 
+// §4 자리별 적용표: 입력 라벨 14/600, 도움말 14/500 — 둘 다 '작은 글씨' 단계.
 function Field({ label, term, children, hint }) {
+  const controlId = useId();
+  const labelId = `${controlId}-label`;
+  const hintId = `${controlId}-hint`;
+  const directControl =
+    isValidElement(children) &&
+    typeof children.type === "string" &&
+    ["input", "select", "textarea"].includes(children.type);
+  const renderedControl = directControl
+    ? cloneElement(children, {
+        id: children.props.id || controlId,
+        "aria-describedby": hint
+          ? [children.props["aria-describedby"], hintId].filter(Boolean).join(" ")
+          : children.props["aria-describedby"],
+      })
+    : children;
+
   return (
-    <label className="block">
-      <span className="flex items-center text-sm text-slate-700 mb-1">
-        {label}
+    <div
+      className="block"
+      role={directControl ? undefined : "group"}
+      aria-labelledby={directControl ? undefined : labelId}
+      aria-describedby={!directControl && hint ? hintId : undefined}
+    >
+      <div className="flex items-center t-small font-semibold text-slate-700 mb-2">
+        {directControl ? (
+          <label id={labelId} htmlFor={children.props.id || controlId}>{label}</label>
+        ) : (
+          <span id={labelId}>{label}</span>
+        )}
         {term && <InfoTooltip term={term} />}
-      </span>
-      {children}
-      {hint && <span className="block text-xs text-slate-500 mt-1">{hint}</span>}
-    </label>
+      </div>
+      {renderedControl}
+      {hint && <div id={hintId} className="t-small text-slate-500 mt-2">{hint}</div>}
+    </div>
   );
 }
 
-// text-field 규격: 48px 높이 · radius 12 · 면 배경, 포커스 시 캔버스 배경 + 브랜드 테두리.
-const inputCls =
-  "w-full h-12 rounded-xl bg-slate-100 border border-transparent px-4 text-slate-900 " +
-  "focus:outline-none focus:bg-surface focus:border-brand-line focus:ring-1 focus:ring-brand-line";
+// 빌더의 입력 묶음. 상자로 감싸지 않고 괘선 + 제목으로만 나눈다(§1-3) —
+// 폼 상자 예외는 화면 전체를 감싸는 폼(로그인·모달)에만 적용한다.
+function Group({ title, term, children, note }) {
+  return (
+    <section className="pt-5 border-t border-slate-200">
+      <div className="flex items-center text-slate-700 mb-3">
+        <h3 className="t-title">{title}</h3>
+        {term && <InfoTooltip term={term} />}
+        {note}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const inputCls = "field";
 
 export default function Builder({ form, setForm }) {
+  const instanceId = useId().replace(/:/g, "");
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const setChk = (k) => (e) => setForm({ ...form, [k]: e.target.checked });
   const rt = form.rule_type;
@@ -75,7 +113,7 @@ export default function Builder({ form, setForm }) {
   // keep focus across keystrokes. They close over the current `form`.
   const num = (k, label, opts = {}) => (
     <Field key={k} label={label} term={opts.term} hint={opts.hint}>
-      <input className={inputCls} type="number" step={opts.step || "any"} value={form[k]} onChange={set(k)} />
+      <input className="field num" type="number" step={opts.step || "any"} value={form[k]} onChange={set(k)} />
     </Field>
   );
   const sel = (k, label, options, opts = {}) => (
@@ -88,23 +126,29 @@ export default function Builder({ form, setForm }) {
     </Field>
   );
   const chk = (k, label, opts = {}) => (
-    <label key={k} className="flex items-center gap-2 text-sm text-slate-700">
-      <input type="checkbox" checked={!!form[k]} onChange={setChk(k)} />
-      {label}
+    <div key={k} className="flex items-center gap-1 h-12 t-small text-slate-700">
+      <label htmlFor={`${instanceId}-${k}`} className="flex items-center gap-2 cursor-pointer">
+        <input id={`${instanceId}-${k}`} type="checkbox" checked={!!form[k]} onChange={setChk(k)} />
+        {label}
+      </label>
       {opts.term && <InfoTooltip term={opts.term} />}
-    </label>
+    </div>
   );
-  const cap = num("initial_capital", `초기 자본 initial_capital (${quoteOf(form.symbol)})`, {
+  const cap = num("initial_capital", `시작 자금 (${quoteOf(form.symbol)})`, {
     hint: money(form.initial_capital, form.symbol, krwRate),
   });
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="종목 (symbol)" hint="쉼표로 여러 종목 = 포트폴리오 (예: BTCUSDT, ETHUSDT). 자금을 균등 분할해 합산해요">
+      <div>
+        <h3 className="t-title text-slate-900">기본 설정</h3>
+        <p className="mt-1 t-small text-slate-500">무엇을, 어떤 규칙으로, 어느 기간에 확인할지 정해요.</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 gap-y-5">
+        <Field label="종목" hint="여러 종목은 쉼표로 나눠 써요. 자금은 종목 수만큼 균등하게 나눠요.">
           <input className={inputCls} value={form.symbol} onChange={set("symbol")} placeholder="BTCUSDT 또는 BTCUSDT, ETHUSDT" />
         </Field>
-        <Field label="규칙 타입 (전략)" term={`strat_${rt}`}>
+        <Field label="매매 방식" term={`strat_${rt}`}>
           <select className={inputCls} value={rt} onChange={(e) => setForm(withTypeDefaults(form, e.target.value))}>
             {Object.entries(RULE_TYPES).map(([k, v]) => (
               <option key={k} value={k}>{v.label}</option>
@@ -115,13 +159,11 @@ export default function Builder({ form, setForm }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Field
-          label={
-            <span className="flex items-center">
-              포지션 방향
-              <span className="ml-1 text-xs text-slate-500">롱</span>
-              <InfoTooltip term="long" />
-              <span className="ml-1 text-xs text-slate-500">숏</span>
-              <InfoTooltip term="short" />
+          label="포지션"
+          hint={
+            <span className="inline-flex items-center flex-wrap">
+              롱 <InfoTooltip term="long" />
+              <span className="ml-2">숏</span> <InfoTooltip term="short" />
             </span>
           }
         >
@@ -130,11 +172,11 @@ export default function Builder({ form, setForm }) {
             <option value="short" disabled={!meta.allowShort}>숏 (short)</option>
           </select>
         </Field>
-        {sel("candle_interval", "봉 단위 candle_interval", CANDLE_INTERVALS, {
+        {sel("candle_interval", "봉 간격", CANDLE_INTERVALS, {
           term: "candle_interval",
           hint: meta.indicator ? "지표 계산 기준(필수)" : "체결 판정 기준",
         })}
-        <Field label="백테스트 기간" term="backtest">
+        <Field label="테스트 기간" term="backtest">
           <select className={inputCls} value={form.preset} onChange={set("preset")}>
             {PERIOD_PRESETS.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
@@ -159,49 +201,49 @@ export default function Builder({ form, setForm }) {
         const lev = Math.max(1, Math.round(Number(form.leverage) || 1));
         const risk = leverageRisk(lev);
         return (
-          <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-            <div className="flex items-center text-sm font-semibold text-slate-500">
-              레버리지 (leverage)
-              <InfoTooltip term="leverage" />
-              <span className="ml-2 text-xs font-normal text-slate-400">격리(isolated) · 백테스트·모의만</span>
-            </div>
+          <Group
+            title="레버리지"
+            term="leverage"
+            note={<span className="ml-2 t-caption text-slate-500">격리(isolated) · 백테스트·모의만</span>}
+          >
             <div className="flex items-center gap-4">
               <input
+                aria-label="레버리지 배수"
                 type="range" min="1" max={MAX_LEVERAGE} step="1" value={lev}
                 onChange={set("leverage")}
                 className="flex-1 accent-red-500"
               />
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <input
-                  className={inputCls + " w-20 text-center"}
+                  aria-label="레버리지 배수 직접 입력"
+                  className="field w-20 text-center num"
                   type="number" min="1" max={MAX_LEVERAGE} step="1" value={form.leverage}
                   onChange={set("leverage")}
                 />
-                <span className="text-sm text-slate-500">배</span>
+                <span className="t-label text-slate-700">배</span>
               </div>
             </div>
             {risk ? (
-              <div className={"rounded-lg border px-3 py-2 text-sm flex items-start gap-2 " + risk.cls}>
-                <span className="text-base leading-none">⚠️</span>
+              <div className={"alert mt-3 t-small flex items-start gap-2 " + risk.cls}>
                 <span>
-                  <b>레버리지 {risk.n}배 · {risk.level}</b> — 가격이 약{" "}
-                  <b>{risk.movePct.toFixed(risk.movePct < 1 ? 2 : 1)}%</b> 반대로 움직이면{" "}
-                  <b>청산(전액 손실)</b>됩니다.
-                  {lev >= 10 && " 초보자에겐 특히 위험해요."}
+                  <b>레버리지 <span className="num">{risk.n}</span>배 · {risk.level}</b> — 가격이 약{" "}
+                  <b className="num">{risk.movePct.toFixed(risk.movePct < 1 ? 2 : 1)}%</b> 반대로 움직이면{" "}
+                  <b>청산(전액 손실)</b>돼요.
+                  {lev >= 10 && " 처음이라면 특히 위험해요."}
                   <InfoTooltip term="liquidation" />
                 </span>
               </div>
             ) : (
-              <div className="text-xs text-slate-500">1배 = 현물과 동일(청산 없음). 배수를 올리면 수익도 손실도 그만큼 커지고 청산 위험이 생겨요.</div>
+              <div className="mt-3 t-small text-slate-500">1배 = 현물과 같아요(청산 없음). 배수를 올리면 수익도 손실도 그만큼 커지고 청산 위험이 생겨요.</div>
             )}
-          </div>
+          </Group>
         );
       })()}
 
       {/* price-data source (spot vs USDT-M futures) */}
       {sel(
         "market",
-        "데이터 소스 (market)",
+        "시세 데이터",
         [
           { value: "auto", label: "자동 (숏·레버리지 → 선물, 그 외 현물)" },
           { value: "spot", label: "현물 (spot)" },
@@ -221,39 +263,37 @@ export default function Builder({ form, setForm }) {
       )}
 
       {/* rule-specific params */}
-      <div className="rounded-xl border border-slate-200 p-4 space-y-4">
-        <div className="text-sm font-semibold text-slate-500">규칙 파라미터 · {meta.label}</div>
-
+      <Group title={<>전략 조건 · <span className="text-slate-900">{meta.label}</span></>}>
         {rt === "A" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("take_profit_pct", "익절률 take_profit (%)", { term: "take_profit" })}
+            {num("take_profit_pct", "익절 기준 (%)", { term: "take_profit" })}
             {cap}
           </div>
         )}
         {rt === "B" && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {num("buy_price", `매수가 buy_price (${quoteOf(form.symbol)})`, { term: "limit_order" })}
-            {num("sell_price", `매도가 sell_price (${quoteOf(form.symbol)})`, { term: "limit_order" })}
+            {num("buy_price", `살 가격 (${quoteOf(form.symbol)})`, { term: "limit_order" })}
+            {num("sell_price", `팔 가격 (${quoteOf(form.symbol)})`, { term: "limit_order" })}
             {cap}
           </div>
         )}
         {rt === "C" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("amount_per_buy", `1회 매수액 amount_per_buy (${quoteOf(form.symbol)})`, { term: "dca", hint: money(form.amount_per_buy, form.symbol, krwRate) })}
-            {num("interval_days", "매수 주기 interval_days (일)", { term: "dca" })}
+            {num("amount_per_buy", `한 번에 살 금액 (${quoteOf(form.symbol)})`, { term: "dca", hint: money(form.amount_per_buy, form.symbol, krwRate) })}
+            {num("interval_days", "매수 간격 (일)", { term: "dca" })}
           </div>
         )}
 
         {rt === "D" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("lower_price", `하단가격 lower_price (${quoteOf(form.symbol)})`, { term: "grid" })}
-            {num("upper_price", `상단가격 upper_price (${quoteOf(form.symbol)})`, { term: "grid" })}
-            {num("grid_count", "격자 수 grid_count", { term: "grid_count", step: "1" })}
-            {sel("grid_mode", "격자 간격 grid_mode", [{ value: "arithmetic", label: "등차(균등금액)" }, { value: "geometric", label: "등비(균등비율)" }], { term: "grid_mode" })}
+            {num("lower_price", `가격 범위 하단 (${quoteOf(form.symbol)})`, { term: "grid" })}
+            {num("upper_price", `가격 범위 상단 (${quoteOf(form.symbol)})`, { term: "grid" })}
+            {num("grid_count", "나눌 칸 수", { term: "grid_count", step: "1" })}
+            {sel("grid_mode", "칸 간격", [{ value: "arithmetic", label: "같은 금액 간격" }, { value: "geometric", label: "같은 비율 간격" }], { term: "grid_mode" })}
             {num("per_grid_invest", `격자당 투입액 (빈칸=균등, ${quoteOf(form.symbol)})`, { hint: "비우면 예산을 격자 수로 균등 분배" })}
-            {sel("band_exit_action", "밴드 이탈 시 band_exit_action", [{ value: "stop", label: "전량 청산·중단" }, { value: "hold", label: "보유 유지" }])}
+            {sel("band_exit_action", "가격 범위를 벗어나면", [{ value: "stop", label: "전량 정리하고 중단" }, { value: "hold", label: "보유 유지" }])}
             <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-              {chk("rebalance_on_start", "시작 시 격자 재배치 rebalance_on_start")}
+              {chk("rebalance_on_start", "시작 가격에 맞춰 칸 다시 배치")}
               {cap}
             </div>
           </div>
@@ -261,36 +301,36 @@ export default function Builder({ form, setForm }) {
 
         {rt === "E" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {sel("entry_mode", "진입 방식 entry_mode", [{ value: "immediate", label: "즉시 진입" }, { value: "dip", label: "하락 시 진입(dip)" }])}
-            {num("entry_dip", "진입 하락폭 entry_dip (%)", { hint: "entry_mode=dip일 때" })}
-            {num("activation_profit", "발동 이익 activation_profit (%)", { term: "activation_profit" })}
-            {num("trail_percent", "추적 폭 trail_percent (%)", { term: "trail_percent" })}
-            {chk("reenter_after_exit", "청산 후 재진입 reenter_after_exit")}
+            {sel("entry_mode", "처음 들어갈 때", [{ value: "immediate", label: "바로 진입" }, { value: "dip", label: "가격이 내리면 진입" }])}
+            {num("entry_dip", "진입할 하락폭 (%)", { hint: "가격이 내리면 진입을 골랐을 때 써요" })}
+            {num("activation_profit", "추적을 시작할 이익 (%)", { term: "activation_profit" })}
+            {num("trail_percent", "고점에서 허용할 하락폭 (%)", { term: "trail_percent" })}
+            {chk("reenter_after_exit", "정리한 뒤 다시 진입")}
             {cap}
           </div>
         )}
 
         {rt === "F" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("rsi_period", "RSI 기간 rsi_period", { term: "rsi", step: "1" })}
-            {num("confirm_candles", "확정 봉수 confirm_candles", { step: "1", hint: "연속 N봉 충족 시 신호" })}
-            {num("entry_threshold", "진입 임계 entry_threshold", { hint: "이하일 때 진입(롱)" })}
-            {num("exit_threshold", "청산 임계 exit_threshold", { hint: "이상일 때 청산(롱)" })}
-            {sel("exit_mode", "청산 방식 exit_mode", [{ value: "indicator", label: "지표" }, { value: "take_profit", label: "익절" }, { value: "both", label: "둘 중 먼저" }])}
-            {num("take_profit", "익절률 take_profit (%)", { hint: "exit_mode 익절/both일 때" })}
+            {num("rsi_period", "RSI 계산 기간", { term: "rsi", step: "1" })}
+            {num("confirm_candles", "신호를 확인할 봉 수", { step: "1", hint: "연속해서 조건을 만족해야 신호로 봐요" })}
+            {num("entry_threshold", "진입할 RSI", { hint: "이 숫자 이하일 때 진입해요" })}
+            {num("exit_threshold", "정리할 RSI", { hint: "이 숫자 이상일 때 정리해요" })}
+            {sel("exit_mode", "정리 기준", [{ value: "indicator", label: "RSI 신호" }, { value: "take_profit", label: "익절 기준" }, { value: "both", label: "둘 중 먼저" }])}
+            {num("take_profit", "익절 기준 (%)", { hint: "익절 기준을 포함할 때 써요" })}
             {cap}
           </div>
         )}
 
         {rt === "G" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("bb_period", "기간 bb_period", { term: "bollinger", step: "1" })}
-            {num("bb_std", "표준편차 bb_std (σ)", { term: "bollinger" })}
-            {sel("strategy", "전략 strategy", [{ value: "reversion", label: "되돌림(밴드터치 역추세)" }, { value: "breakout", label: "돌파(밴드 뚫기)" }])}
-            {sel("exit_target", "청산 목표 exit_target", [{ value: "mid", label: "중앙선" }, { value: "opposite", label: "반대 밴드" }])}
+            {num("bb_period", "평균 계산 기간", { term: "bollinger", step: "1" })}
+            {num("bb_std", "밴드 폭 (표준편차 σ)", { term: "bollinger" })}
+            {sel("strategy", "밴드를 쓰는 방식", [{ value: "reversion", label: "밴드 안으로 되돌아오기" }, { value: "breakout", label: "밴드 밖으로 돌파하기" }])}
+            {sel("exit_target", "정리할 위치", [{ value: "mid", label: "가운데 선" }, { value: "opposite", label: "반대쪽 밴드" }])}
             <div className="col-span-full grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-              {chk("squeeze_filter", "스퀴즈 필터 squeeze_filter", { term: "squeeze" })}
-              {num("squeeze_lookback", "스퀴즈 룩백 squeeze_lookback", { step: "1" })}
+              {chk("squeeze_filter", "변동성이 줄어든 구간만 사용", { term: "squeeze" })}
+              {num("squeeze_lookback", "변동성 비교 기간", { step: "1" })}
             </div>
             {cap}
           </div>
@@ -298,71 +338,70 @@ export default function Builder({ form, setForm }) {
 
         {rt === "H" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("base_order_size", `기본주문 base_order_size (${quoteOf(form.symbol)})`, { term: "martingale" })}
-            {num("safety_order_size", `세이프티주문 safety_order_size (${quoteOf(form.symbol)})`, { term: "safety_order" })}
-            {num("price_deviation", "가격 편차 price_deviation (%)", { hint: "세이프티 주문 간 하락 간격" })}
-            {num("max_safety_orders", "최대 세이프티 max_safety_orders", { step: "1" })}
-            {num("safety_order_step_scale", "간격 배율 step_scale")}
-            {num("safety_order_volume_scale", "수량 배율 volume_scale")}
-            {num("take_profit", "익절률 take_profit (%)", { hint: "평단 기준 익절" })}
+            {num("base_order_size", `처음 살 금액 (${quoteOf(form.symbol)})`, { term: "martingale" })}
+            {num("safety_order_size", `첫 추가매수 금액 (${quoteOf(form.symbol)})`, { term: "safety_order" })}
+            {num("price_deviation", "추가매수할 하락 간격 (%)", { hint: "가격이 이만큼 더 내릴 때마다 추가로 사요" })}
+            {num("max_safety_orders", "최대 추가매수 횟수", { step: "1" })}
+            {num("safety_order_step_scale", "하락 간격 배율")}
+            {num("safety_order_volume_scale", "추가매수 금액 배율")}
+            {num("take_profit", "평균 매수가 기준 익절 (%)", { hint: "전체 평균 매수가를 기준으로 계산해요" })}
             {cap}
-            <div className="col-span-full text-xs text-amber-600">stop_loss는 평단가 기준으로 적용됩니다. 총 소요자금이 (초기자본 × 투입비율)을 넘으면 저장이 반려돼요.</div>
+            <div className="col-span-full t-caption text-amber-700">손절은 평균 매수가를 기준으로 적용돼요. 총 소요자금이 (시작 자금 × 투입 비율)을 넘으면 저장되지 않아요.</div>
           </div>
         )}
 
         {rt === "I" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("k", "변동성 계수 k", { term: "volatility_breakout" })}
-            {sel("exit_mode", "청산 방식 exit_mode", [{ value: "next_open", label: "다음 봉 시가" }, { value: "trailing", label: "트레일링" }, { value: "take_profit", label: "익절" }])}
-            {num("trail_percent", "추적 폭 trail_percent (%)", { term: "trail_percent", hint: "exit_mode=trailing일 때" })}
-            {num("take_profit", "익절률 take_profit (%)", { hint: "exit_mode=take_profit일 때" })}
-            {num("ma_filter_period", "이평 필터 ma_filter_period", { step: "1", hint: "비우면 미사용" })}
-            {num("session_start_hour", "세션 시작시각 session_start_hour", { step: "1" })}
+            {num("k", "돌파 기준 계수 (k)", { term: "volatility_breakout" })}
+            {sel("exit_mode", "정리 기준", [{ value: "next_open", label: "다음 봉 시작 가격" }, { value: "trailing", label: "고점 추적" }, { value: "take_profit", label: "익절 기준" }])}
+            {num("trail_percent", "고점에서 허용할 하락폭 (%)", { term: "trail_percent", hint: "고점 추적을 골랐을 때 써요" })}
+            {num("take_profit", "익절 기준 (%)", { hint: "익절 기준을 골랐을 때 써요" })}
+            {num("ma_filter_period", "이동평균 필터 기간", { step: "1", hint: "비워두면 사용하지 않아요" })}
+            {num("session_start_hour", "하루 계산 시작 시각", { step: "1" })}
             {cap}
-            <div className="col-span-full text-xs text-slate-500">내부적으로 봉 단위 데이터로 전일 변동폭을 계산합니다.</div>
+            <div className="col-span-full t-caption text-slate-500">봉 단위 데이터로 전일 변동폭을 계산해요.</div>
           </div>
         )}
 
         {rt === "J" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {sel("ma_type", "이평 종류 ma_type", [{ value: "SMA", label: "단순(SMA)" }, { value: "EMA", label: "지수(EMA)" }], { term: "ma_cross" })}
-            {num("confirm_candles", "확정 봉수 confirm_candles", { step: "1" })}
-            {num("fast_period", "단기 fast_period", { step: "1" })}
-            {num("slow_period", "장기 slow_period", { step: "1" })}
-            {sel("exit_signal", "청산 신호 exit_signal", [{ value: "dead_cross", label: "데드크로스" }, { value: "take_profit", label: "익절" }, { value: "both", label: "둘 중 먼저" }])}
-            {num("take_profit", "익절률 take_profit (%)", { hint: "exit_signal 익절/both일 때" })}
+            {sel("ma_type", "이동평균 종류", [{ value: "SMA", label: "단순 이동평균 (SMA)" }, { value: "EMA", label: "최근 가격 비중이 큰 평균 (EMA)" }], { term: "ma_cross" })}
+            {num("confirm_candles", "신호를 확인할 봉 수", { step: "1" })}
+            {num("fast_period", "짧은 이동평균 기간", { step: "1" })}
+            {num("slow_period", "긴 이동평균 기간", { step: "1" })}
+            {sel("exit_signal", "정리 기준", [{ value: "dead_cross", label: "평균선이 아래로 교차" }, { value: "take_profit", label: "익절 기준" }, { value: "both", label: "둘 중 먼저" }])}
+            {num("take_profit", "익절 기준 (%)", { hint: "익절 기준을 포함할 때 써요" })}
             {cap}
           </div>
         )}
 
         {rt === "K" && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {num("drop_trigger_pct", "방어 발동 하락률 drop_trigger_pct (%)", { hint: "진입가 대비 이만큼 하락하면 방어 발동" })}
-            {num("partial_exit_pct", "부분 매도 비율 partial_exit_pct (%)", { hint: "발동 시 보유량의 몇 %를 매도" })}
-            {chk("flip_to_short", "부분 매도 후 숏 전환 flip_to_short")}
-            {num("long_take_profit_pct", "롱 익절률 long_take_profit (%)", { hint: "비우면 방어로만 청산" })}
-            {num("short_take_profit_pct", "숏 익절률 short_take_profit (%)", { hint: "숏 전환 후 추가 하락 시 익절" })}
-            {num("short_stop_loss_pct", "숏 손절률 short_stop_loss (%)", { hint: "반등 시 손절 (필수)" })}
-            {chk("reenter_long_after", "숏 종료 후 롱 재진입 reenter_long_after")}
+            {num("drop_trigger_pct", "방어를 시작할 하락폭 (%)", { hint: "진입가보다 이만큼 내리면 방어를 시작해요" })}
+            {num("partial_exit_pct", "방어할 때 팔 비율 (%)", { hint: "들고 있는 수량 중 몇 %를 팔지 정해요" })}
+            {chk("flip_to_short", "일부를 판 뒤 숏으로 전환")}
+            {num("long_take_profit_pct", "롱 익절 기준 (%)", { hint: "비워두면 하락 방어만 사용해요" })}
+            {num("short_take_profit_pct", "숏 익절 기준 (%)", { hint: "숏 전환 뒤 가격이 더 내릴 때 정리해요" })}
+            {num("short_stop_loss_pct", "숏 손절 기준 (%)", { hint: "가격이 반등할 때 손실을 제한해요. 필수예요" })}
+            {chk("reenter_long_after", "숏을 끝낸 뒤 롱으로 다시 진입")}
             {cap}
-            <div className="col-span-full text-xs text-amber-600">숏 다리 때문에 선물(USDT-M)로 실행됩니다. 숏 손절(short_stop_loss)은 필수예요.</div>
+            <div className="col-span-full t-caption text-amber-700">숏 전환이 포함돼 선물(USDT-M)로 실행돼요. 숏 손절 기준은 필수예요.</div>
           </div>
         )}
-      </div>
+      </Group>
 
       {/* common risk */}
-      <div className="rounded-xl border border-slate-200 p-4 space-y-4">
-        <div className="text-sm font-semibold text-slate-500">공통 리스크 관리</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {num("invest_ratio_pct", "자금 투입 비율 invest_ratio (%)", { term: "invest_ratio", hint: "한 번에 자금의 몇 %를 투입할지" })}
-          <Field label="손절률 stop_loss (%)" term="stop_loss" hint={isShort && (rt === "A" || rt === "B") ? "숏은 손절 필수" : "미사용 시 체크 해제"}>
+      <Group title="손실 제한">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 gap-y-5">
+          {num("invest_ratio_pct", "한 번에 사용할 자금 (%)", { term: "invest_ratio", hint: "시작 자금 중 한 번에 얼마를 쓸지 정해요" })}
+          <Field label="손절 기준 (%)" term="stop_loss" hint={isShort && (rt === "A" || rt === "B") ? "숏은 손절이 필수예요" : "사용하지 않으려면 체크를 풀어요"}>
             <div className="flex items-center gap-2">
-              <input type="checkbox" checked={form.use_stop_loss} disabled={isShort && (rt === "A" || rt === "B")} onChange={setChk("use_stop_loss")} />
-              <input className={inputCls} type="number" value={form.stop_loss_pct} disabled={!form.use_stop_loss} onChange={set("stop_loss_pct")} />
+              <input aria-label="손절 기준 사용" type="checkbox" checked={form.use_stop_loss} disabled={isShort && (rt === "A" || rt === "B")} onChange={setChk("use_stop_loss")} />
+              <input aria-label="손절률 (%)" className="field num" type="number" value={form.stop_loss_pct} disabled={!form.use_stop_loss} onChange={set("stop_loss_pct")} />
             </div>
           </Field>
         </div>
-      </div>
+      </Group>
 
       {/* advanced common risk. For DCA (rule C) the time-based holding/cooldown
           controls don't apply (buy-and-accumulate, no round-trip exits), so they
@@ -370,32 +409,32 @@ export default function Builder({ form, setForm }) {
       {(() => {
         const isDca = rt === "C";
         return (
-          <details className="rounded-xl border border-slate-200 p-4">
-            <summary className="text-sm font-semibold text-slate-500 cursor-pointer">공통 리스크 관리 (고급)</summary>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-              <Field label="일일 최대손실 (%)" term="daily_max_loss" hint={isDca ? "도달 시 당일 추가 매수 중단" : "도달 시 당일 거래 중단"}>
+          <details className="pt-5 border-t border-slate-200">
+            <summary className="t-label text-slate-700 cursor-pointer">고급 위험 관리</summary>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 gap-y-5 mt-4">
+              <Field label="하루 최대 손실 (%)" term="daily_max_loss" hint={isDca ? "도달하면 그날 추가 매수를 멈춰요" : "도달하면 그날 거래를 멈춰요"}>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" checked={form.use_daily_max_loss} onChange={setChk("use_daily_max_loss")} />
-                  <input className={inputCls} type="number" value={form.daily_max_loss_pct} disabled={!form.use_daily_max_loss} onChange={set("daily_max_loss_pct")} />
+                  <input aria-label="하루 최대 손실 사용" type="checkbox" checked={form.use_daily_max_loss} onChange={setChk("use_daily_max_loss")} />
+                  <input aria-label="하루 최대 손실률 (%)" className="field num" type="number" value={form.daily_max_loss_pct} disabled={!form.use_daily_max_loss} onChange={set("daily_max_loss_pct")} />
                 </div>
               </Field>
-              <Field label="최대 보유시간 (h)" term="max_holding" hint={isDca ? "DCA(누적 매수)에는 미적용" : "초과 시 강제 청산"}>
+              <Field label="가장 오래 보유할 시간" term="max_holding" hint={isDca ? "분할매수에는 사용하지 않아요" : "이 시간을 넘기면 강제로 정리해요"}>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" checked={!isDca && form.use_max_holding} disabled={isDca} onChange={setChk("use_max_holding")} />
-                  <input className={inputCls} type="number" value={form.max_holding_hours} disabled={isDca || !form.use_max_holding} onChange={set("max_holding_hours")} />
+                  <input aria-label="최대 보유시간 사용" type="checkbox" checked={!isDca && form.use_max_holding} disabled={isDca} onChange={setChk("use_max_holding")} />
+                  <input aria-label="최대 보유시간 (시간)" className="field num" type="number" value={form.max_holding_hours} disabled={isDca || !form.use_max_holding} onChange={set("max_holding_hours")} />
                 </div>
               </Field>
               {isDca ? (
-                <Field label="재진입 금지 (분)" term="cooldown" hint="DCA(누적 매수)에는 미적용">
-                  <input className={inputCls} type="number" value={form.cooldown_minutes} disabled onChange={set("cooldown_minutes")} />
+                <Field label="손절 뒤 쉬는 시간 (분)" term="cooldown" hint="분할매수에는 사용하지 않아요">
+                  <input className="field num" type="number" value={form.cooldown_minutes} disabled onChange={set("cooldown_minutes")} />
                 </Field>
               ) : (
-                num("cooldown_minutes", "재진입 금지 (분)", { term: "cooldown", hint: "손절 후 쿨다운" })
+                num("cooldown_minutes", "손절 뒤 쉬는 시간 (분)", { term: "cooldown", hint: "이 시간 동안 다시 진입하지 않아요" })
               )}
             </div>
             {isDca && (
-              <div className="mt-3 text-xs text-slate-500">
-                ※ DCA 전략은 매수 후 계속 보유하는 방식이라 <b>최대 보유시간·재진입 금지</b>는 적용되지 않아요. 익절/청산이 있는 전략(A·B·E~J)에서 동작합니다.
+              <div className="notice mt-4 t-small text-slate-700">
+                DCA 전략은 사고 나서 계속 들고 가는 방식이라 <b className="text-slate-900">최대 보유시간·재진입 금지</b>는 적용되지 않아요. 익절·청산이 있는 전략(A·B·E~J)에서 동작해요.
               </div>
             )}
           </details>
@@ -403,25 +442,25 @@ export default function Builder({ form, setForm }) {
       })()}
 
       {/* fees */}
-      <details className="rounded-xl border border-slate-200 p-4">
-        <summary className="text-sm font-semibold text-slate-500 cursor-pointer">
-          수수료 · 슬리피지 · 펀딩비 (고급)
+      <details className="pt-5 border-t border-slate-200">
+        <summary className="t-label text-slate-700 cursor-pointer">
+          거래 비용과 펀딩비
         </summary>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-          {num("commission_pct", "수수료 (%)", { term: "commission", step: "0.01" })}
-          {num("slippage_pct", "슬리피지 (%)", { term: "slippage", step: "0.01" })}
-          {num("funding_pct", "펀딩비/일 (숏, %)", { step: "0.01" })}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 gap-y-5 mt-4">
+          {num("commission_pct", "거래 수수료 (%)", { term: "commission", step: "0.01" })}
+          {num("slippage_pct", "체결 가격 차이 (%)", { term: "slippage", step: "0.01" })}
+          {num("funding_pct", "하루 펀딩비 (숏, %)", { step: "0.01" })}
         </div>
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={loadFunding}
             disabled={fundingBusy}
-            className="rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40 px-3 py-1.5 text-xs font-semibold"
+            className="btn btn-s btn-secondary"
           >
-            {fundingBusy ? "불러오는 중…" : "⛽ 실제 펀딩비 불러오기"}
+            {fundingBusy ? "불러오는 중…" : "실제 펀딩비 가져오기"}
           </button>
-          <span className="text-xs text-slate-500">
+          <span className="t-caption text-slate-500">
             {fundingMsg || "선물 시장의 실제 평균 펀딩비(일)를 이 기간 기준으로 가져와 채워요."}
           </span>
         </div>

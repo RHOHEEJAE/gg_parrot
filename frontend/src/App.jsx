@@ -1,67 +1,78 @@
-import { useEffect } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import Studio from "./pages/Studio.jsx";
-import Leaderboard from "./pages/Leaderboard.jsx";
-import Auth from "./pages/Auth.jsx";
-import MyPage from "./pages/MyPage.jsx";
-import Guide from "./pages/Guide.jsx";
-import News from "./pages/News.jsx";
-import Board from "./pages/Board.jsx";
-import BoardPost from "./pages/BoardPost.jsx";
-import ForgotPassword from "./pages/ForgotPassword.jsx";
-import ResetPassword from "./pages/ResetPassword.jsx";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import Home from "./pages/Home.jsx";
 import { api } from "./api.js";
-import { useAuth, clearAuth, updateAuthUser } from "./lib/auth.js";
-import SimBadge from "./components/SimBadge.jsx";
-import KimchiBanner from "./components/KimchiBanner.jsx";
-import FearGreedBanner from "./components/FearGreedBanner.jsx";
-import HangangTempBanner from "./components/HangangTempBanner.jsx";
+import { useAuth, clearAuth, getToken, updateAuthUser } from "./lib/auth.js";
 // [차후 도입] 고래 동향 배너 — 거래소/컨트랙트 지갑 노이즈 정리 후 켤 예정.
 // 컴포넌트와 백엔드(app/whales.py)는 그대로 두고 마운트만 꺼둡니다.
 // import WhaleBanner from "./components/WhaleBanner.jsx";
 import HotCoinsMarquee from "./components/HotCoinsMarquee.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
+import MarketContext from "./components/MarketContext.jsx";
+import SiteNavigation, { BrandLink } from "./components/SiteNavigation.jsx";
 
-const NAV_LINKS = [
-  { to: "/", end: true, label: "오늘의 리더보드" },
-  { to: "/builder", label: "빌더" },
-  { to: "/news", label: "코인동향" },
-  { to: "/board", label: "게시판" },
-  { to: "/guide", label: "가이드" },
-];
+// Keep the first screen small and quick. The builder, charts, guide, and
+// community screens are fetched only when their route is opened.
+const Studio = lazy(() => import("./pages/Studio.jsx"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard.jsx"));
+const Auth = lazy(() => import("./pages/Auth.jsx"));
+const MyPage = lazy(() => import("./pages/MyPage.jsx"));
+const Guide = lazy(() => import("./pages/Guide.jsx"));
+const News = lazy(() => import("./pages/News.jsx"));
+const Board = lazy(() => import("./pages/Board.jsx"));
+const BoardPost = lazy(() => import("./pages/BoardPost.jsx"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword.jsx"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword.jsx"));
 
-// The five Korean menu labels plus the account controls can't share one row on a
-// phone, so below `md` the menu drops to its own horizontally-scrollable strip
-// and only the logo + account controls stay on the top row.
-function Nav() {
-  const cls = ({ isActive }) =>
-    "px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap " +
-    (isActive ? "bg-slate-200 text-slate-900" : "text-slate-500 hover:text-slate-900");
-  const links = NAV_LINKS.map((l) => (
-    <NavLink key={l.to} to={l.to} end={l.end} className={cls}>
-      {l.label}
-    </NavLink>
-  ));
+function useDismissibleMenu(open, setOpen, rootRef, triggerRef, routeKey) {
+  useEffect(() => {
+    setOpen(false);
+  }, [routeKey, setOpen]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, rootRef, setOpen, triggerRef]);
+}
+
+function TopBar({ hasSidebar, onOpenNavigation, menuButtonRef }) {
   return (
-    <header className="border-b border-slate-200 sticky top-0 bg-surface/80 backdrop-blur z-20">
-      <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <NavLink to="/" className="text-base font-bold shrink-0">
-              🦜 GGparrot
-            </NavLink>
-            <nav className="hidden md:flex gap-1">{links}</nav>
-          </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <SimBadge className="hidden lg:inline-flex" />
-            <AuthNav />
-            <ThemeToggle />
-          </div>
+    <header className="site-header glass">
+      <div className="site-header-inner">
+        <div className="site-header-leading">
+          {hasSidebar ? (
+            <button
+              ref={menuButtonRef}
+              type="button"
+              onClick={onOpenNavigation}
+              className="site-mobile-menu-button"
+              aria-label="페이지 메뉴 열기"
+              aria-controls="site-mobile-navigation"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" focusable="false"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+            </button>
+          ) : null}
+          <BrandLink className={hasSidebar ? "site-mobile-brand" : "site-auth-brand"} />
         </div>
-        {/* mobile menu — bleeds to the screen edges so the last item can scroll in */}
-        <nav className="md:hidden -mx-4 mt-1 px-2 flex gap-1 overflow-x-auto no-scrollbar">
-          {links}
-        </nav>
+        {hasSidebar ? <MarketContext /> : <div className="site-auth-shell-label">안전하게 계정 연결하기</div>}
+        <div className="site-header-utility">
+          <ThemeToggle />
+          <AuthNav />
+        </div>
       </div>
     </header>
   );
@@ -70,107 +81,194 @@ function Nav() {
 function AuthNav() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
+  const { pathname, search } = useLocation();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  useDismissibleMenu(open, setOpen, rootRef, triggerRef, pathname + search);
 
   // Refresh the points balance from the server when logged in (keeps the header
   // in sync after unlocks/earnings made in other tabs).
   useEffect(() => {
     if (!token) return;
-    api.me().then((d) => updateAuthUser(d.user)).catch(() => {});
+    let active = true;
+    const requestedToken = token;
+    api.me()
+      .then((d) => {
+        if (active && getToken() === requestedToken) updateAuthUser(d.user);
+      })
+      .catch((reason) => {
+        if (active && getToken() === requestedToken && reason.status === 401) clearAuth();
+      });
+    return () => {
+      active = false;
+    };
   }, [token]);
 
+  // 노란 채움은 화면당 하나(§1-4). 상단바는 어느 화면에나 얹히는 크롬이라
+  // 여기서 노랑을 쓰면 본문의 주요 행동과 항상 겹친다 — 그래서 secondary 로 둔다.
   if (!token || !user) {
+    if (["/login", "/forgot", "/reset"].includes(pathname)) {
+      return null;
+    }
+    const next = encodeURIComponent(pathname + search);
     return (
-      <div className="flex items-center gap-1">
-        <button onClick={() => navigate("/login")}
-          className="px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap text-slate-600 hover:text-slate-900">
+      <div className="site-auth-actions">
+        <button onClick={() => navigate(`/login?next=${next}`)} className="btn btn-s btn-ghost">
           로그인
         </button>
-        <button onClick={() => navigate("/login?mode=signup")}
-          className="px-2.5 sm:px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap bg-brand hover:bg-brand-hover text-brand-ink">
+        <button onClick={() => navigate(`/login?mode=signup&next=${next}`)} className="btn btn-s btn-secondary site-signup-button">
           회원가입
         </button>
       </div>
     );
   }
+
   return (
-    <div className="flex items-center gap-2">
-      <button onClick={() => navigate("/mypage")}
-        className="hidden sm:inline text-sm text-slate-700 font-medium truncate max-w-[10rem] hover:text-indigo-600"
-        title="마이페이지">
-        👤 {user.username}
+    <div ref={rootRef} className="site-menu-root site-account-root">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="site-account-trigger"
+        aria-expanded={open}
+        aria-controls="site-account-menu"
+        aria-label={`계정 메뉴 · ${user.username} · ${(user.points_balance ?? 0).toLocaleString()}포인트`}
+      >
+        <span className="site-account-name">{user.username}</span>
+        <span className="num font-bold text-indigo-800">{(user.points_balance ?? 0).toLocaleString()}P</span>
+        <span aria-hidden="true">{open ? "↑" : "↓"}</span>
       </button>
-      <button onClick={() => navigate("/mypage")}
-        className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200 px-2 sm:px-2.5 py-1 text-xs font-bold whitespace-nowrap text-indigo-800 hover:bg-indigo-100 num"
-        title="마이페이지 · 보유 포인트">
-        🪙 {(user.points_balance ?? 0).toLocaleString()}P
-      </button>
-      <button onClick={() => { clearAuth(); navigate("/"); }}
-        className="px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap text-slate-500 hover:text-slate-900">
-        로그아웃
-      </button>
+      {open ? (
+        <div id="site-account-menu" className="site-account-panel">
+          <button type="button" onClick={() => { setOpen(false); navigate("/mypage"); }}>
+            <strong>내 활동</strong><span>등록한 매크로와 포인트</span>
+          </button>
+          <button type="button" onClick={() => { setOpen(false); clearAuth(); navigate("/"); }}>
+            <strong>로그아웃</strong><span>이 브라우저에서 계정 연결 끊기</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-// 로그인 게이트 — 빌더 등 로그인 후 이용 화면을 감싼다.
-function RequireAuth({ children }) {
-  const { token } = useAuth();
-  const navigate = useNavigate();
-  if (token) return children;
+function RouteChangeEffects() {
+  const { pathname } = useLocation();
+  const firstPath = useRef(pathname);
+
+  useEffect(() => {
+    const section = pathname === "/"
+      ? "껄무새"
+      : pathname.startsWith("/builder") || pathname.startsWith("/s/")
+      ? "매크로 빌더"
+      : pathname.startsWith("/leaderboard") || pathname.startsWith("/gallery")
+      ? "리더보드"
+      : pathname.startsWith("/news")
+      ? "코인동향"
+      : pathname.startsWith("/board")
+      ? "게시판"
+      : pathname.startsWith("/guide")
+      ? "사용 가이드"
+      : pathname.startsWith("/mypage")
+      ? "내 활동"
+      : pathname.startsWith("/login")
+      ? "로그인"
+      : "껄무새";
+    document.title = section === "껄무새" ? section : `${section} · 껄무새`;
+    if (firstPath.current === pathname) return;
+    firstPath.current = pathname;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.getElementById("main-content")?.focus({ preventScroll: true });
+  }, [pathname]);
+
+  return null;
+}
+
+function RouteLoading() {
   return (
-    <div className="max-w-md mx-auto mt-10 rounded-2xl bg-surface border border-slate-200 p-8 text-center">
-      <div className="text-4xl mb-3">🔒</div>
-      <h2 className="text-lg font-bold text-slate-900">로그인 후 이용할 수 있는 서비스입니다</h2>
-      <p className="mt-2 text-sm text-slate-500">
-        매크로 빌더는 로그인한 회원만 사용할 수 있어요. 로그인하거나 회원가입 후 이용해 주세요.
-      </p>
-      <div className="mt-5 flex items-center justify-center gap-2">
-        <button
-          onClick={() => navigate("/login")}
-          className="rounded-lg bg-brand hover:bg-brand-hover px-5 py-2 text-sm font-bold text-brand-ink"
-        >
-          로그인
-        </button>
-        <button
-          onClick={() => navigate("/login?mode=signup")}
-          className="rounded-lg bg-slate-200 hover:bg-slate-300 px-5 py-2 text-sm font-semibold text-slate-700"
-        >
-          회원가입
-        </button>
-      </div>
+    <div className="py-14 text-center t-small text-slate-500" role="status">
+      화면 불러오는 중…
     </div>
   );
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  const isHome = pathname === "/";
+  const authShell = ["/login", "/forgot", "/reset"].includes(pathname);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const menuButtonRef = useRef(null);
+  const closeMobileNavigation = useCallback(() => setMobileNavigationOpen(false), []);
+
+  useEffect(() => {
+    setMobileNavigationOpen(false);
+  }, [pathname]);
+
   return (
-    <div className="min-h-screen pb-16">
-      <Nav />
-      <KimchiBanner />
-      <FearGreedBanner />
-      <HangangTempBanner />
-      {/* [차후 도입] <WhaleBanner /> */}
-      <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
-        <Routes>
-          <Route path="/" element={<Leaderboard />} />
-          <Route path="/builder" element={<RequireAuth><Studio /></RequireAuth>} />
-          <Route path="/s/:slug" element={<RequireAuth><Studio /></RequireAuth>} />
-          <Route path="/mypage" element={<MyPage />} />
-          <Route path="/guide" element={<Guide />} />
-          <Route path="/news" element={<News />} />
-          <Route path="/board" element={<Board />} />
-          <Route path="/board/:id" element={<BoardPost />} />
-          <Route path="/login" element={<Auth />} />
-          <Route path="/forgot" element={<ForgotPassword />} />
-          <Route path="/reset" element={<ResetPassword />} />
-          <Route path="/leaderboard" element={<Navigate to="/" replace />} />
-          <Route path="/gallery" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-      <footer className="max-w-6xl mx-auto px-4 pb-6 pt-2 sm:py-8 text-xs text-slate-500">
-        본 서비스는 실거래/자동매매를 하지 않습니다. 모든 수치는 과거 데이터 시뮬레이션 결과입니다.
-      </footer>
-      <HotCoinsMarquee />
+    <div className={`${isHome ? "home-shell" : "min-h-screen"} ${authShell ? "site-auth-layout" : "site-product-layout"}`}>
+      <a href="#main-content" className="skip-link">본문으로 건너뛰기</a>
+      {authShell ? null : (
+        <SiteNavigation mobileOpen={mobileNavigationOpen} onClose={closeMobileNavigation} triggerRef={menuButtonRef} />
+      )}
+      <div
+        className={authShell ? "site-frame is-auth" : "site-frame"}
+        inert={mobileNavigationOpen ? "" : undefined}
+        aria-hidden={mobileNavigationOpen || undefined}
+      >
+        <TopBar
+          hasSidebar={!authShell}
+          onOpenNavigation={() => setMobileNavigationOpen(true)}
+          menuButtonRef={menuButtonRef}
+        />
+        {/* [차후 도입] <WhaleBanner /> */}
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={isHome ? "home-main" : "max-w-6xl mx-auto px-5 sm:px-6 py-6 sm:py-8"}
+        >
+          <RouteChangeEffects />
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/builder" element={<Studio />} />
+              <Route path="/s/:slug" element={<Studio />} />
+              <Route path="/mypage" element={<MyPage />} />
+              <Route path="/guide" element={<Guide />} />
+              <Route path="/news" element={<News />} />
+              <Route path="/board" element={<Board />} />
+              <Route path="/board/:id" element={<BoardPost />} />
+              <Route path="/login" element={<Auth />} />
+              <Route path="/forgot" element={<ForgotPassword />} />
+              <Route path="/reset" element={<ResetPassword />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/gallery" element={<Navigate to="/leaderboard" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </main>
+        {isHome ? null : (
+          <footer className="max-w-6xl mx-auto px-5 sm:px-6 pb-6 pt-2 sm:py-8 t-caption text-slate-500">
+            웹 화면은 실제 주문을 보내지 않아요. 백테스트·모의 결과는 투자 조언이 아니며,
+            내려받은 실행 파일의 사용 책임은 사용자에게 있어요.
+          </footer>
+        )}
+        {isHome || authShell ? null : <HotCoinsMarquee />}
+      </div>
+    </div>
+  );
+}
+
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <div className="max-w-md mx-auto py-12 text-center">
+      <div className="t-caption text-slate-500 num">404</div>
+      <h1 className="mt-2 t-h2 text-slate-900">이 화면은 찾을 수 없어요</h1>
+      <p className="mt-3 t-small text-slate-700">주소를 다시 확인하거나 시작 화면으로 돌아가요.</p>
+      <button onClick={() => navigate("/")} className="mt-6 btn btn-l btn-primary">
+        메인으로
+      </button>
     </div>
   );
 }

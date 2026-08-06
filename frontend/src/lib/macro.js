@@ -154,45 +154,45 @@ export function validate(form) {
 
   // Short A/B must set a stop loss (short loss is theoretically unbounded).
   if (isShort && (rt === "A" || rt === "B") && (!form.use_stop_loss || !(form.stop_loss_pct > 0))) {
-    return "숏 규칙(A·B)은 손절률(stop_loss)을 반드시 입력해야 합니다.";
+    return "숏으로 A·B 전략을 쓸 때는 손절 기준을 반드시 입력해야 해요.";
   }
   if (isShort && !meta.allowShort) {
-    return `${rt} 타입은 숏을 지원하지 않습니다.`;
+    return `${rt} 전략은 숏을 지원하지 않아요.`;
   }
   const lev = num(form.leverage);
-  if (rt === "C" && lev > 1) return "C(DCA) 타입은 레버리지를 지원하지 않습니다(1배 고정).";
-  if (!(lev >= 1) || lev > MAX_LEVERAGE) return `레버리지는 1~${MAX_LEVERAGE}배 사이여야 합니다.`;
-  if (!Number.isInteger(lev)) return "레버리지는 정수 배수여야 합니다.";
+  if (rt === "C" && lev > 1) return "C 분할매수 전략은 레버리지 없이 1배로만 쓸 수 있어요.";
+  if (!(lev >= 1) || lev > MAX_LEVERAGE) return `레버리지는 1~${MAX_LEVERAGE}배 사이로 입력해요.`;
+  if (!Number.isInteger(lev)) return "레버리지는 정수로 입력해요.";
   if (rt === "D") {
-    if (!(num(form.upper_price) > num(form.lower_price))) return "D: 상단가격이 하단가격보다 커야 합니다.";
-    if (form.grid_mode === "geometric" && !(num(form.lower_price) > 0)) return "D: 기하 그리드는 하단가격 > 0 이어야 합니다.";
+    if (!(num(form.upper_price) > num(form.lower_price))) return "D 전략의 가격 범위 상단은 하단보다 커야 해요.";
+    if (form.grid_mode === "geometric" && !(num(form.lower_price) > 0)) return "D 전략에서 같은 비율 간격을 쓰려면 하단 가격이 0보다 커야 해요.";
     if (form.per_grid_invest !== "" && num(form.per_grid_invest) * num(form.grid_count) > num(form.initial_capital) * (num(form.invest_ratio_pct) / 100) + 1e-6) {
-      return "D: 전 격자 체결 필요자금이 (초기자본 × 투입비율)을 초과합니다.";
+      return "D 전략의 전체 칸에 필요한 금액이 사용할 수 있는 자금을 넘어요.";
     }
   }
   if (rt === "H") {
     const budget = num(form.initial_capital) * (num(form.invest_ratio_pct) / 100);
     if (martingaleRequiredFunds(form) > budget + 1e-6) {
-      return "H: 최대 물타기 필요자금이 (초기자본 × 투입비율)을 초과합니다.";
+      return "H 전략의 최대 추가매수 금액이 사용할 수 있는 자금을 넘어요.";
     }
   }
   if (rt === "F" && (form.exit_mode === "take_profit" || form.exit_mode === "both") && !(num(form.take_profit) > 0)) {
-    return "F: 청산방식이 익절 포함이면 take_profit(%)이 필요합니다.";
+    return "F 전략에서 익절 기준을 포함하려면 익절률을 입력해요.";
   }
   if (rt === "I" && form.exit_mode === "take_profit" && !(num(form.take_profit) > 0)) {
-    return "I: 청산방식이 익절이면 take_profit(%)이 필요합니다.";
+    return "I 전략에서 익절 기준을 골랐다면 익절률을 입력해요.";
   }
   if (rt === "J") {
-    if (!(num(form.fast_period) < num(form.slow_period))) return "J: 단기 이평선 기간 < 장기 이평선 기간 이어야 합니다.";
+    if (!(num(form.fast_period) < num(form.slow_period))) return "J 전략의 짧은 이동평균 기간은 긴 기간보다 작아야 해요.";
     if ((form.exit_signal === "take_profit" || form.exit_signal === "both") && !(num(form.take_profit) > 0)) {
-      return "J: 청산신호가 익절 포함이면 take_profit(%)이 필요합니다.";
+      return "J 전략에서 익절 기준을 포함하려면 익절률을 입력해요.";
     }
   }
   if (rt === "K") {
-    if (!(num(form.drop_trigger_pct) > 0)) return "K: 방어 발동 하락률(drop_trigger_pct)이 필요합니다.";
-    if (!(num(form.partial_exit_pct) > 0 && num(form.partial_exit_pct) <= 100)) return "K: 부분 매도 비율(partial_exit_pct)은 0 초과 100 이하여야 합니다.";
-    if (!(num(form.short_take_profit_pct) > 0)) return "K: 숏 익절률(short_take_profit_pct)이 필요합니다.";
-    if (!(num(form.short_stop_loss_pct) > 0)) return "K: 숏 전환은 손절률(short_stop_loss_pct)이 필수입니다.";
+    if (!(num(form.drop_trigger_pct) > 0)) return "K 전략의 방어 시작 하락폭을 입력해요.";
+    if (!(num(form.partial_exit_pct) > 0 && num(form.partial_exit_pct) <= 100)) return "K 전략에서 팔 비율은 0%보다 크고 100% 이하여야 해요.";
+    if (!(num(form.short_take_profit_pct) > 0)) return "K 전략의 숏 익절 기준을 입력해요.";
+    if (!(num(form.short_stop_loss_pct) > 0)) return "K 전략에서 숏으로 전환하려면 손절 기준이 필요해요.";
   }
   return null;
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Builder from "../components/Builder.jsx";
 import ResultView from "../components/ResultView.jsx";
 import SimBadge from "../components/SimBadge.jsx";
@@ -7,110 +7,196 @@ import PaperPanel from "../components/PaperPanel.jsx";
 import CandleChart from "../components/CandleChart.jsx";
 import OptimizePanel from "../components/OptimizePanel.jsx";
 import RegisterMacroModal from "../components/RegisterMacroModal.jsx";
+import JourneySteps from "../components/JourneySteps.jsx";
+import { PageHeader } from "../components/Page.jsx";
 import { api } from "../api.js";
-import { buildMacro, defaultForm, macroToForm, validate } from "../lib/macro.js";
+import {
+  RULE_TYPES,
+  buildMacro,
+  defaultForm,
+  macroToForm,
+  validate,
+  withTypeDefaults,
+} from "../lib/macro.js";
+import {
+  completeJourney,
+  isJourneyComplete,
+  peekRegistrationDraft,
+  readHeroDraft,
+  takeRegistrationDraft,
+} from "../lib/journey.js";
+
+function macroKey(macro) {
+  return JSON.stringify(macro);
+}
+
+function periodLabelOf(macro) {
+  if (macro.period?.preset === "custom") {
+    return `${macro.period.start || "?"} ~ ${macro.period.end || "?"}`;
+  }
+  return { "1y": "최근 1년", "6m": "최근 6개월", "3m": "최근 3개월" }[
+    macro.period?.preset
+  ] || macro.period?.preset || "";
+}
+
+function ChartDisclosure({ symbols }) {
+  const [open, setOpen] = useState(false);
+  const contentId = useId();
+
+  if (symbols.length === 0) return null;
+  return (
+    <section className="border-y border-slate-200">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="w-full py-3 flex items-center justify-between gap-3 text-left"
+        aria-expanded={open}
+        aria-controls={contentId}
+      >
+        <span>
+          <span className="t-label text-slate-900">실시간 차트</span>
+          <span className="ml-2 t-caption text-slate-500 num">
+            {symbols.length === 1 ? symbols[0] : `${symbols.length}개 종목`}
+          </span>
+        </span>
+        <span className="t-caption text-slate-400" aria-hidden="true">{open ? "접기 ↑" : "펼치기 ↓"}</span>
+      </button>
+      {open ? (
+        <div id={contentId} className="pb-5 space-y-6">
+          {symbols.map((symbol) => <CandleChart key={symbol} symbol={symbol} />)}
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 export default function Studio() {
   const { slug } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [form, setForm] = useState(defaultForm());
+  const entryQuery = searchParams.toString();
+  const [form, setForm] = useState(defaultForm);
   const [result, setResult] = useState(null);
-  const [perSymbol, setPerSymbol] = useState([]); // 포트폴리오 종목별 분해
-  const [explanation, setExplanation] = useState(null); // 껄무새 해설 (rule-based; AI로 교체 가능)
-  const [aiBusy, setAiBusy] = useState(false); // AI 원인 분석 요청 중
-  const [aiError, setAiError] = useState(""); // AI 실패 사유
+  const [testedMacro, setTestedMacro] = useState(null);
+  const [perSymbol, setPerSymbol] = useState([]);
+  const [explanation, setExplanation] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [summary, setSummary] = useState("");
   const [dataSource, setDataSource] = useState("");
   const [periodLabel, setPeriodLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [share, setShare] = useState(null); // { slug, url }
+  const [share, setShare] = useState(null);
   const [loadedFrom, setLoadedFrom] = useState("");
-  const [runLeverage, setRunLeverage] = useState(1); // leverage of the last run (for badges)
-  const [autoRun, setAutoRun] = useState(true); // re-run backtest automatically on builder change
-  const [registerOpen, setRegisterOpen] = useState(false); // 리더보드 등록 모달
+  const [runLeverage, setRunLeverage] = useState(1);
+  const [autoRun, setAutoRun] = useState(true);
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registrationMode, setRegistrationMode] = useState("live");
+  const [hasRegistrationDraft, setHasRegistrationDraft] = useState(
+    () => {
+      const draft = peekRegistrationDraft();
+      return !!draft && draft.context?.origin !== "hero";
+    }
+  );
+  const [journeyDone, setJourneyDone] = useState(isJourneyComplete);
+  const [guideOpen, setGuideOpen] = useState(
+    () => searchParams.get("guide") === "1"
+  );
+  const requestIdRef = useRef(0);
+  const lastAttemptKeyRef = useRef("");
+  const aiRequestIdRef = useRef(0);
+  const latestTestedKeyRef = useRef("");
+  const resumeRequestIdRef = useRef(0);
+  const processedEntryQueryRef = useRef("");
+  const guideContentId = useId();
+  const guideRequested = searchParams.get("guide") === "1";
+
+  useEffect(() => {
+    if (guideRequested) setGuideOpen(true);
+  }, [guideRequested]);
+
+  const valErr = validate(form);
+  const currentMacro = useMemo(() => buildMacro(form), [form]);
+  const currentMacroKey = useMemo(() => macroKey(currentMacro), [currentMacro]);
+  const testedMacroKey = testedMacro ? macroKey(testedMacro) : "";
+  latestTestedKeyRef.current = testedMacroKey;
+  const resultIsFresh = !!testedMacro && testedMacroKey === currentMacroKey;
+
+  const chartSymbols = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const part of (form.symbol || "").split(",")) {
+      const symbol = part.trim().toUpperCase();
+      if (!symbol || seen.has(symbol)) continue;
+      seen.add(symbol);
+      out.push(symbol);
+      if (out.length === 5) break;
+    }
+    return out;
+  }, [form.symbol]);
 
   // Clone flow: load a shared macro into the builder.
   useEffect(() => {
     if (!slug) return;
+    let alive = true;
     setBusy(true);
     api
       .getMacro(slug)
       .then((data) => {
+        if (!alive) return;
         setForm(macroToForm(data.macro));
         setLoadedFrom(data.human_summary);
-        setShare({ slug, url: `${window.location.origin}/s/${slug}` });
+        setShare({
+          slug,
+          url: `${window.location.origin}/s/${slug}`,
+          macroKey: macroKey(buildMacro(macroToForm(data.macro))),
+        });
       })
-      .catch((e) => setError(String(e.message || e)))
-      .finally(() => setBusy(false));
+      .catch((reason) => alive && setError(String(reason.message || reason)))
+      .finally(() => alive && setBusy(false));
+    return () => {
+      alive = false;
+    };
   }, [slug]);
 
-  // Copy-to-builder from a leaderboard entry: full macro passed via router state.
+  // Copy-to-builder from a leaderboard entry. Consume only router user state;
+  // preserve React Router's own key/index bookkeeping.
   useEffect(() => {
     const macro = location.state?.macro;
-    if (macro) {
-      setForm(macroToForm(macro));
-      setLoadedFrom("리더보드에서 복사한 매크로");
-      window.history.replaceState({}, ""); // consume state so refresh doesn't re-apply
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+    if (!macro) return;
+    setForm(macroToForm(macro));
+    setLoadedFrom(
+      location.state?.source === "hero-guide"
+        ? "시작 가이드에서 고른 설정"
+        : "리더보드에서 복사한 매크로"
+    );
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [location.pathname, location.search, location.state, navigate]);
 
-  // Prefill symbol from a "오늘의 경주마" marquee click (/?symbol=XRPUSDT).
-  useEffect(() => {
-    if (slug) return; // clone flow owns the form
-    const sym = searchParams.get("symbol");
-    if (!sym) return;
-    setForm((f) => ({ ...f, symbol: sym.toUpperCase() }));
-    searchParams.delete("symbol");
-    setSearchParams(searchParams, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, slug]);
-
-  const valErr = validate(form);
-
-  // 상단 미리보기 차트용 종목 목록. 포트폴리오(쉼표 입력)면 종목별로 하나씩.
-  const chartSymbols = (form.symbol || "")
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean)
-    .filter((s, i, a) => a.indexOf(s) === i)
-    .slice(0, 5);
-
-  // Auto-run: re-run the backtest a beat after the builder settles, so tweaking
-  // a value no longer means "scroll down → click 실행 → scroll back up" each time.
-  // Only fires once a first result exists (so the empty state isn't skipped) and
-  // the form is valid. Debounced; skipped while a run is already in flight.
-  useEffect(() => {
-    if (!autoRun || valErr || !result) return;
-    const t = setTimeout(() => {
-      if (!busy) runBacktest();
-    }, 700);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRun, JSON.stringify(form)]);
-
-  // Ctrl/⌘+Enter runs the backtest from anywhere on the page.
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        if (!valErr && !busy) runBacktest();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valErr, busy, JSON.stringify(form)]);
-
-  async function runBacktest() {
+  const runBacktest = useCallback(async (snapshot) => {
+    const validationError = validate(snapshot);
     setError("");
-    if (valErr) return setError(valErr);
+    if (validationError) {
+      setError(validationError);
+      return false;
+    }
+
+    const macro = buildMacro(snapshot);
+    const key = macroKey(macro);
+    const requestId = ++requestIdRef.current;
+    // Record attempts, not only successes. An automatic run that fails should
+    // wait for an edit or an explicit retry instead of hammering the API every
+    // 700ms with the same invalid/unavailable input.
+    lastAttemptKeyRef.current = key;
+    aiRequestIdRef.current += 1;
+    setAiBusy(false);
     setBusy(true);
     try {
-      const macro = buildMacro(form);
       const data = await api.backtest(macro);
+      if (requestId !== requestIdRef.current) return false;
+      setTestedMacro(macro);
       setResult(data.result);
       setPerSymbol(data.per_symbol || []);
       setExplanation(data.explanation || null);
@@ -119,184 +205,397 @@ export default function Studio() {
       setDataSource(data.data_source);
       setPeriodLabel(data.period_label);
       setRunLeverage(macro.leverage || 1);
-    } catch (e) {
-      setError(String(e.message || e));
+      return true;
+    } catch (reason) {
+      if (requestId === requestIdRef.current) setError(String(reason.message || reason));
+      return false;
     } finally {
-      setBusy(false);
+      if (requestId === requestIdRef.current) setBusy(false);
     }
-  }
+  }, []);
+
+  // Consume all entry parameters in one place so two effects cannot restore
+  // each other's deleted query keys. A login-return draft wins over starter
+  // presets and is re-tested on the server before registration reopens.
+  useEffect(() => {
+    if (slug) return;
+    const entryParams = new URLSearchParams(entryQuery);
+    const symbol = entryParams.get("symbol");
+    const strategy = entryParams.get("strategy");
+    const validStrategy = strategy && RULE_TYPES[strategy] ? strategy : "";
+    const resumeRegistration = entryParams.get("register") === "1";
+    const fromHero = entryParams.get("from") === "hero";
+    if (!symbol && !validStrategy && !resumeRegistration && !fromHero) {
+      processedEntryQueryRef.current = "";
+      return;
+    }
+    if (processedEntryQueryRef.current === entryQuery) return;
+    processedEntryQueryRef.current = entryQuery;
+    const resumeRequestId = ++resumeRequestIdRef.current;
+
+    const nextParams = new URLSearchParams(entryParams);
+    nextParams.delete("symbol");
+    nextParams.delete("strategy");
+    nextParams.delete("register");
+    nextParams.delete("from");
+    setSearchParams(nextParams, { replace: true });
+
+    if (resumeRegistration) {
+      const pendingDraft = peekRegistrationDraft();
+      if (pendingDraft?.context?.origin === "hero") {
+        setError("시작 가이드에서 보관한 등록 설정이에요. 시작 화면에서 등록을 이어가 주세요.");
+        setHasRegistrationDraft(false);
+        return;
+      }
+      const draft = takeRegistrationDraft();
+      setHasRegistrationDraft(false);
+      if (!draft?.macro) {
+        setError("이어갈 등록 설정을 찾지 못했어요. 조건을 확인하고 백테스트를 다시 실행해 주세요.");
+        return;
+      }
+
+      let restored;
+      try {
+        restored = macroToForm(draft.macro);
+      } catch (_) {
+        setError("보관한 등록 설정을 읽지 못했어요. 조건을 다시 정해 주세요.");
+        return;
+      }
+
+      setForm(restored);
+      setRegistrationMode(draft.context?.mode === "replay" ? "replay" : "live");
+      setGuideOpen(true);
+      setLoadedFrom("로그인 완료 · 등록 전 결과를 다시 확인하는 중");
+      runBacktest(restored).then((ok) => {
+        if (resumeRequestId !== resumeRequestIdRef.current || !ok) return;
+        setLoadedFrom("로그인 완료 · 같은 설정으로 백테스트를 다시 확인했어요");
+        setRegisterOpen(true);
+      });
+      return;
+    }
+
+    if (fromHero) {
+      const heroMacro = readHeroDraft();
+      if (!heroMacro) {
+        setError("시작 가이드에서 고른 설정을 찾지 못했어요. 조건을 다시 확인해 주세요.");
+        return;
+      }
+      try {
+        setForm(macroToForm(heroMacro));
+        setLoadedFrom("시작 가이드에서 고른 설정");
+        setGuideOpen(true);
+      } catch (_) {
+        setError("시작 가이드 설정을 읽지 못했어요. 조건을 다시 정해 주세요.");
+      }
+      return;
+    }
+
+    setForm((previous) => {
+      let next = previous;
+      if (validStrategy) next = withTypeDefaults(next, validStrategy);
+      if (symbol) next = { ...next, symbol: symbol.toUpperCase() };
+      return next;
+    });
+  }, [entryQuery, runBacktest, setSearchParams, slug]);
+
+  // Once the first result exists, re-run after edits settle. Freshness keys and
+  // request IDs prevent stale responses from becoming registerable results.
+  useEffect(() => {
+    if (!autoRun || !testedMacro || valErr || busy || registerOpen) return;
+    if (currentMacroKey === lastAttemptKeyRef.current) return;
+    const snapshot = form;
+    const timer = window.setTimeout(() => runBacktest(snapshot), 700);
+    return () => window.clearTimeout(timer);
+  }, [autoRun, busy, currentMacroKey, form, registerOpen, runBacktest, testedMacro, valErr]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (registerOpen || !(event.ctrlKey || event.metaKey) || event.key !== "Enter") return;
+      event.preventDefault();
+      if (!valErr && !busy) runBacktest(form);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [busy, form, registerOpen, runBacktest, valErr]);
 
   async function saveAndShare() {
     setError("");
     if (valErr) return setError(valErr);
+    const requestId = ++requestIdRef.current;
+    const key = currentMacroKey;
+    lastAttemptKeyRef.current = key;
+    aiRequestIdRef.current += 1;
+    setAiBusy(false);
     setBusy(true);
     try {
-      const macro = buildMacro(form);
+      const macro = currentMacro;
       const data = await api.createMacro(macro);
+      if (requestId !== requestIdRef.current) return;
+      setTestedMacro(macro);
       setResult(data.result);
+      // The save endpoint returns an aggregate representative result but no
+      // per-symbol breakdown. Clear previous rows instead of attaching them to
+      // the newly saved result, and derive the period label from the snapshot.
+      setPerSymbol((previous) => (testedMacroKey === key ? previous : []));
       setExplanation(data.explanation || null);
+      setAiError("");
       setSummary(data.human_summary);
       setDataSource(data.data_source);
+      setPeriodLabel(periodLabelOf(macro));
       setRunLeverage(macro.leverage || 1);
-      setShare({ slug: data.share_slug, url: `${window.location.origin}/s/${data.share_slug}` });
-    } catch (e) {
-      setError(String(e.message || e));
+      setShare({
+        slug: data.share_slug,
+        url: `${window.location.origin}/s/${data.share_slug}`,
+        macroKey: key,
+      });
+    } catch (reason) {
+      if (requestId === requestIdRef.current) setError(String(reason.message || reason));
     } finally {
-      setBusy(false);
+      if (requestId === requestIdRef.current) setBusy(false);
     }
   }
 
   async function enrichExplanation() {
-    if (aiBusy || !result) return;
+    if (aiBusy || !result || !testedMacro) return;
+    const macro = testedMacro;
+    const key = macroKey(macro);
+    const requestId = ++aiRequestIdRef.current;
     setAiBusy(true);
     setAiError("");
     try {
-      const macro = buildMacro(form);
       const data = await api.explainAi(macro);
+      if (requestId !== aiRequestIdRef.current || latestTestedKeyRef.current !== key) return;
       if (data.explanation) setExplanation(data.explanation);
       if (data.ai_available === false) setAiError("AI 해설이 아직 준비되지 않았어요 (서버 설정 필요).");
       else if (data.ai_error) setAiError(data.ai_error);
-    } catch (e) {
-      setAiError("AI 호출 실패: " + String(e.message || e));
+    } catch (reason) {
+      if (requestId === aiRequestIdRef.current && latestTestedKeyRef.current === key) {
+        setAiError("AI 호출 실패: " + String(reason.message || reason));
+      }
     } finally {
-      setAiBusy(false);
+      if (requestId === aiRequestIdRef.current) setAiBusy(false);
     }
   }
 
+  function finishRegistration(entry) {
+    completeJourney();
+    setJourneyDone(true);
+    setRegisterOpen(false);
+    navigate("/leaderboard", {
+      replace: true,
+      state: { justRegistered: true, registeredId: entry?.id || null },
+    });
+  }
+
+  function openRegistration(mode = "live") {
+    setRegistrationMode(mode === "replay" ? "replay" : "live");
+    setRegisterOpen(true);
+  }
+
+  const journeyStage = journeyDone ? 3 : resultIsFresh ? 2 : busy && testedMacro ? 1 : 0;
+
   return (
-    <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
-      <section>
-        <h2 className="text-xl font-bold text-slate-900 mb-4">매크로 빌더</h2>
-        {loadedFrom && (
-          <div className="mb-4 rounded-lg bg-blue-50 border border-blue-300 px-4 py-3 text-sm text-blue-800">
-            복제한 매크로: {loadedFrom}
-          </div>
-        )}
-        <Builder form={form} setForm={setForm} />
+    <div>
+      <PageHeader
+        eyebrow="조건 정하기 → 결과 확인 → 리더보드 등록"
+        title="매크로 만들기"
+        description="종목과 거래 조건을 정하고, 과거 데이터로 확인한 뒤 같은 설정을 리더보드에 등록할 수 있어요."
+        actions={<SimBadge />}
+      />
 
-        {valErr && <div className="mt-4 text-sm text-amber-700">{valErr}</div>}
-        {error && <div className="mt-4 text-sm text-red-600">오류: {error}</div>}
-
-        <div className="mt-6 flex items-center gap-3 flex-wrap">
-          <button
-            onClick={runBacktest}
-            disabled={busy || !!valErr}
-            className="rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 px-5 py-2.5 font-semibold text-white"
-          >
-            {busy ? "실행 중…" : "백테스트 실행"}
-          </button>
-          <button
-            onClick={saveAndShare}
-            disabled={busy || !!valErr}
-            className="rounded-lg bg-slate-200 hover:bg-slate-300 disabled:opacity-40 px-5 py-2.5 font-semibold"
-          >
-            저장 & 공유 링크 생성
-          </button>
-          <label
-            className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer select-none"
-            title="빌더를 바꾸면 자동으로 백테스트를 다시 실행합니다"
-          >
-            <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} />
-            ⚡ 자동 실행
-          </label>
-          <span className="text-xs text-slate-400">
-            빌더 수정 시 자동 재실행 · <kbd className="rounded border border-slate-300 bg-slate-100 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-100 px-1">Enter</kbd> 로도 실행
+      <section className="mb-8 border-y border-slate-200" aria-labelledby="studio-guide-title">
+        <button
+          type="button"
+          onClick={() => setGuideOpen((value) => !value)}
+          className="w-full py-3 flex items-center justify-between gap-3 text-left"
+          aria-expanded={guideOpen}
+          aria-controls={guideContentId}
+        >
+          <span>
+            <span id="studio-guide-title" className="t-label text-slate-900">처음이라면 이 순서로 진행해요</span>
+            <span className="ml-2 t-caption text-slate-500 num">{Math.min(journeyStage + 1, 3)}/3</span>
           </span>
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-slate-900">결과</h2>
-        </div>
-
-        {/* Live chart of whatever symbol is in the builder — gives the panel
-            something useful before a backtest has ever been run. */}
-        {chartSymbols.length > 0 && (
-          <div className="mb-6 space-y-4">
-            {chartSymbols.length > 1 && (
-              <div className="text-xs text-slate-500">
-                포트폴리오 · {chartSymbols.length}개 종목 (각 종목 실시간 차트)
-              </div>
-            )}
-            {chartSymbols.map((s) => (
-              <CandleChart key={s} symbol={s} />
-            ))}
-          </div>
-        )}
-
-        {!result && !busy && (
-          <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-slate-500">
-            <SimBadge className="mb-4" />
-            <div>백테스트를 실행하면 결과가 여기에 표시됩니다.</div>
-          </div>
-        )}
-
-        {result && (
-          <ResultView
-            result={result}
-            perSymbol={perSymbol}
-            explanation={explanation}
-            onAiExplain={enrichExplanation}
-            aiBusy={aiBusy}
-            aiError={aiError}
-            summary={summary}
-            dataSource={dataSource}
-            periodLabel={periodLabel}
-            symbol={form.symbol}
-            leverage={runLeverage}
-          />
-        )}
-
-        {result && form.rule_type === "A" && (
-          <div className="mt-6">
-            <OptimizePanel form={form} setForm={setForm} valErr={valErr} />
-          </div>
-        )}
-
-        {result && (
-          <div className="mt-6">
-            <PaperPanel macro={buildMacro(form)} valErr={valErr} onRegister={() => setRegisterOpen(true)} />
-          </div>
-        )}
-
-        {share && (
-          <div className="mt-6 pt-5 border-t border-slate-200 space-y-4">
-            <div className="text-sm font-semibold text-slate-700">공유 & 인증 카드</div>
-            <div className="flex gap-2">
-              <input readOnly value={share.url} className="flex-1 rounded-lg bg-slate-100 border border-slate-300 px-3 py-2 text-sm" />
-              <button
-                onClick={() => navigator.clipboard?.writeText(share.url)}
-                className="rounded-lg bg-slate-200 hover:bg-slate-300 px-3 py-2 text-sm"
-              >
-                복사
-              </button>
+          <span className="t-caption text-slate-400" aria-hidden="true">{guideOpen ? "접기 ↑" : "펼치기 ↓"}</span>
+        </button>
+        {guideOpen ? (
+          <div id={guideContentId} className="pb-5">
+            <JourneySteps current={journeyStage} compact />
+            <div className="mt-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="t-small text-slate-700">
+                {journeyDone
+                  ? "등록이 끝났어요. 리더보드에서 모의 수익률이 집계돼요."
+                  : resultIsFresh
+                  ? "방금 확인한 설정이 고정됐어요. 이 설정 그대로 등록할 수 있어요."
+                  : testedMacro
+                  ? "백테스트 뒤 설정이 바뀌었어요. 바뀐 조건을 다시 확인해야 등록할 수 있어요."
+                  : "기본값으로 시작해도 돼요. 종목과 전략을 확인한 뒤 백테스트를 실행해요."}
+              </p>
+              {journeyDone ? (
+                <Link to="/leaderboard" className="btn btn-m btn-secondary">등록한 항목 보기</Link>
+              ) : resultIsFresh ? (
+                <button onClick={() => openRegistration()} className="btn btn-m btn-secondary">
+                  이 설정으로 등록
+                </button>
+              ) : null}
             </div>
-            <img
-              src={api.cardUrl(share.slug)}
-              alt="공유 카드"
-              className="w-full rounded-xl border border-slate-200"
-            />
-            <a
-              href={api.cardUrl(share.slug)}
-              download={`${share.slug}.png`}
-              className="inline-block text-sm text-blue-600 hover:underline"
-            >
-              카드 이미지 다운로드
-            </a>
           </div>
-        )}
+        ) : null}
       </section>
 
-      {registerOpen && (
+      {hasRegistrationDraft ? (
+        <div className="notice mb-7 t-small text-slate-700 flex items-center justify-between gap-4 flex-wrap">
+          <span>로그인 화면으로 가기 전에 테스트한 등록 설정이 남아 있어요.</span>
+          <button
+            type="button"
+            onClick={() => navigate("/builder?guide=1&register=1")}
+            className="btn btn-m btn-secondary"
+          >
+            등록 계속하기
+          </button>
+        </div>
+      ) : null}
+
+      <div className="grid lg:grid-cols-2 gap-8 lg:gap-10">
+        <section id="macro-editor">
+          <div className="mb-5">
+            <div className="t-caption text-slate-500 num">01</div>
+            <h2 className="mt-1 t-h4 text-slate-900">조건 정하기</h2>
+            <p className="mt-2 t-small text-slate-700">처음에는 종목과 전략만 바꾸고 나머지는 기본값으로 확인해도 돼요.</p>
+          </div>
+
+          {loadedFrom ? (
+            <div className="notice mb-5 t-small text-slate-700">
+              불러온 매크로 · <b className="text-slate-900">{loadedFrom}</b>
+            </div>
+          ) : null}
+
+          <Builder form={form} setForm={setForm} />
+
+          {valErr ? <div className="mt-4 t-small text-amber-700" role="alert">{valErr}</div> : null}
+          {error ? <div className="mt-4 t-small text-red-600" role="alert">오류: {error}</div> : null}
+
+          <div className="mt-6 flex items-center gap-3 flex-wrap">
+            <button onClick={() => runBacktest(form)} disabled={busy || !!valErr}
+              className={"btn btn-l " + (resultIsFresh ? "btn-secondary" : "btn-primary")}>
+              {busy ? "결과 계산 중…" : testedMacro && !resultIsFresh ? "바뀐 조건으로 다시 테스트" : "이 조건으로 백테스트"}
+            </button>
+            <button onClick={saveAndShare} disabled={busy || !!valErr} className="btn btn-l btn-secondary">
+              저장하고 공유 링크 만들기
+            </button>
+            <label className="flex items-center gap-2 t-small text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" checked={autoRun} onChange={(event) => setAutoRun(event.target.checked)} />
+              변경 뒤 자동 테스트
+            </label>
+          </div>
+          <p className="mt-3 t-caption text-slate-500">
+            첫 결과 뒤부터 자동 테스트가 동작해요 · <kbd className="num rounded border border-slate-300 bg-slate-100 px-1">Ctrl</kbd>+<kbd className="num rounded border border-slate-300 bg-slate-100 px-1">Enter</kbd>
+          </p>
+        </section>
+
+        <section id="backtest-result">
+          <div className="mb-5">
+            <div className="t-caption text-slate-500 num">02</div>
+            <h2 className="mt-1 t-h4 text-slate-900">결과 확인</h2>
+            <p className="mt-2 t-small text-slate-700">수익률과 함께 최대낙폭, 홀딩 비교, 청산 위험을 확인해요.</p>
+          </div>
+
+          <div className="sr-only" role="status" aria-live="polite">
+            {busy ? "백테스트 결과를 계산하고 있어요." : resultIsFresh ? "백테스트 결과가 준비됐어요." : ""}
+          </div>
+
+          <ChartDisclosure symbols={chartSymbols} />
+
+          {!result && !busy ? (
+            <div className="py-14 text-center border-b border-slate-200">
+              <div className="t-title text-slate-900">아직 계산한 결과가 없어요</div>
+              <div className="mt-2 t-small text-slate-700">왼쪽의 백테스트 버튼을 누르면 이곳에 결과가 나와요.</div>
+            </div>
+          ) : null}
+
+          {result && !resultIsFresh ? (
+            <div className="notice-warn my-5 t-small text-slate-700">
+              결과를 낸 뒤 조건이 바뀌었어요. 아래 숫자는 이전 조건의 결과이며 등록에는 사용할 수 없어요.
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="mt-6">
+              <ResultView
+                result={result}
+                perSymbol={perSymbol}
+                explanation={explanation}
+                onAiExplain={enrichExplanation}
+                aiBusy={aiBusy}
+                aiError={aiError}
+                summary={summary}
+                dataSource={dataSource}
+                periodLabel={periodLabel}
+                symbol={testedMacro?.symbol || form.symbol}
+                leverage={runLeverage}
+              />
+            </div>
+          ) : null}
+
+          {resultIsFresh ? (
+            <section className="mt-6 py-5 border-y border-slate-200 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div className="t-caption text-slate-500 num">03</div>
+                <h3 className="mt-1 t-title text-slate-900">리더보드 등록</h3>
+                <p className="mt-1 t-small text-slate-700">테스트한 설정을 바꾸지 않고 모의매매에 사용해요.</p>
+              </div>
+              <button onClick={() => openRegistration()} className="btn btn-l btn-primary">
+                이 설정으로 등록
+              </button>
+            </section>
+          ) : null}
+
+          {result && form.rule_type === "A" ? (
+            <div className="mt-6">
+              <OptimizePanel form={form} setForm={setForm} valErr={valErr} />
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="mt-6">
+              <PaperPanel macro={currentMacro} valErr={valErr} onRegister={resultIsFresh ? openRegistration : null} />
+            </div>
+          ) : null}
+
+          {share ? (
+            <section className="mt-6 pt-5 border-t border-slate-200 space-y-4">
+              <h3 className="t-title text-slate-900">저장·공유</h3>
+              {share.macroKey && share.macroKey !== currentMacroKey ? (
+                <div className="notice-warn t-small text-slate-700">
+                  이 링크는 저장 당시 설정을 가리켜요. 지금 바꾼 조건을 공유하려면 새 링크를 만들어 주세요.
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <input readOnly value={share.url} aria-label="공유 링크" className="field field-sm flex-1" />
+                <button onClick={() => navigator.clipboard?.writeText(share.url)} className="btn btn-m btn-secondary">
+                  링크 복사
+                </button>
+              </div>
+              <img src={api.cardUrl(share.slug)} alt="공유용 백테스트 인증 카드" className="w-full rounded-xl border border-slate-200" />
+              <a href={api.cardUrl(share.slug)} download={`${share.slug}.png`}
+                className="inline-block t-small font-semibold text-slate-900 underline underline-offset-4 decoration-slate-300 hover:decoration-slate-900">
+                카드 이미지 내려받기
+              </a>
+            </section>
+          ) : null}
+        </section>
+      </div>
+
+      {registerOpen && testedMacro ? (
         <RegisterMacroModal
           key="studio-register"
-          open={true}
-          initialMacro={valErr ? null : buildMacro(form)}
+          open
+          reviewOnly
+          initialMacro={testedMacro}
+          initialMode={registrationMode}
           onClose={() => setRegisterOpen(false)}
-          onDone={() => setRegisterOpen(false)}
+          onDone={finishRegistration}
         />
-      )}
+      ) : null}
     </div>
   );
 }

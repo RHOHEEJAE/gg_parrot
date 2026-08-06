@@ -3,22 +3,48 @@ import { api } from "../api.js";
 import { buildMacro } from "../lib/macro.js";
 import InfoTooltip from "./InfoTooltip.jsx";
 
-// Green→red heat color for a return% relative to the grid's [min,max] range.
-// Mid (0-ish within range) stays pale so extremes read clearly.
+// 수익률 격자의 발산(diverging) 스케일.
 //
-// Saturation/lightness come from CSS vars (see index.css) so the scale inverts
-// with the theme — the cell label is `text-slate-800`, which goes light in dark
-// mode and would otherwise sit on a near-white swatch. Using vars (rather than
-// reading the theme in JS) also means the grid repaints on toggle for free.
-function heatStyle(value, min, max) {
-  if (max <= min) return { background: "rgb(var(--c-slate-100))" };
-  const t = (value - min) / (max - min); // 0 = worst, 1 = best
-  // interpolate red(0) -> amber(0.5) -> green(1)
-  const hue = 0 + t * 130; // 0=red .. 130=green
-  const dip = (Math.abs(t - 0.5) * 18).toFixed(1); // deeper toward the extremes
+// 이전 버전은 red(0°) → amber(65°) → green(130°) 로 이어지는 무지개였고, 가운데가
+// 노랑이었다. 발산 스케일에서 가운데는 "아무것도 아님"으로 읽혀야 하는데 노랑은
+// 우리 브랜드 강조색이라 오히려 '여기가 좋다'로 읽혔다. 게다가 기준점을 [min,max]의
+// 중앙에 두어서, 전 구간이 이익인 격자에서는 '가장 덜 번 칸'이 빨갛게 칠해졌다.
+//
+// 지금은 두 축을 바로잡았다:
+//   · 기준점은 데이터 중앙이 아니라 **0%(본전)** — 발산 측정값의 진짜 피벗이다.
+//   · 양극은 서로 반대로 읽히는 두 색(하락 빨강 ↔ 상승 초록), 가운데는 **무채색**.
+//     채도를 크기에 비례시키므로 0 근처는 자동으로 회색이 된다.
+//   · 좌우를 같은 배율로 재서(대칭 extent) 손실 쪽이 과장되지 않게 한다.
+//
+// 채도·명도는 CSS 변수라 테마가 바뀌면 스케일이 통째로 뒤집힌다. 셀 글자는
+// `text-slate-800` — 이 변수도 테마에 따라 뒤집혀 늘 반대편 명도에 놓인다.
+function heatStyle(value, extent) {
+  if (!(extent > 0)) return { background: "rgb(var(--c-slate-100))" };
+  const t = Math.max(-1, Math.min(1, value / extent)); // -1 = 최대손실, +1 = 최대이익
+  const mag = Math.abs(t);
+  const hue = t >= 0 ? 145 : 5; // 상승 초록 ↔ 하락 빨강 (따뜻함/차가움이 반대)
   return {
-    background: `hsl(${hue} var(--heat-s) calc(var(--heat-l) - ${dip}%))`,
+    background:
+      `hsl(${hue} calc(var(--heat-s) * ${mag.toFixed(3)})` +
+      ` calc(var(--heat-l) + var(--heat-l-shift) * ${mag.toFixed(3)}))`,
   };
+}
+
+// 연속 색 스케일은 범례 없이는 읽을 수 없다.
+function HeatLegend({ extent }) {
+  const stops = [-1, -0.5, 0, 0.5, 1];
+  return (
+    <div className="flex items-center gap-2 t-caption text-slate-500">
+      <span className="num">-{extent.toFixed(1)}%</span>
+      <span className="flex rounded overflow-hidden" aria-hidden>
+        {stops.map((t) => (
+          <span key={t} className="w-7 h-3" style={heatStyle(t * extent, extent)} />
+        ))}
+      </span>
+      <span className="num">+{extent.toFixed(1)}%</span>
+      <span>· 가운데(회색)가 본전</span>
+    </div>
+  );
 }
 
 const pct = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
@@ -29,51 +55,51 @@ const tone = (v) => (v >= 0 ? "text-green-600" : "text-red-600");
 function verdict(best, v) {
   if (!v?.split) {
     return {
-      cls: "border-amber-300 bg-amber-50 text-amber-800",
-      icon: "⚠️",
-      text: "기간이 짧아 검증을 못 했어요. 과거 전체에 맞춘 값이라 그대로 믿기 어렵습니다.",
+      cls: "notice-warn",
+      label: "검증 부족",
+      text: "기간이 짧아 검증을 못 했어요. 과거 전체에 맞춘 값이라 그대로 믿기 어려워요.",
     };
   }
   const oos = best.oos_return_pct;
   if (oos == null) return null;
   if (oos <= 0) {
     return {
-      cls: "border-red-300 bg-red-50 text-red-800",
-      icon: "❌",
-      text: "학습 구간에선 좋았지만 검증 구간에선 손실입니다. 과거에 맞춘 값일 가능성이 높아요.",
+      cls: "notice-risk",
+      label: "검증 손실",
+      text: "학습 구간에선 좋았지만 검증 구간에선 손실이에요. 과거에 맞춘 값일 가능성이 높아요.",
     };
   }
   if (best.final_return_pct > 0 && oos < best.final_return_pct * 0.3) {
     return {
-      cls: "border-amber-300 bg-amber-50 text-amber-800",
-      icon: "⚠️",
-      text: "검증 구간에서도 이익이지만 학습 구간보다 크게 나빠졌어요. 기대치를 낮춰 잡으세요.",
+      cls: "notice-warn",
+      label: "성능 저하",
+      text: "검증 구간에서도 이익이지만 학습 구간보다 크게 나빠졌어요. 기대치를 낮춰 잡아요.",
     };
   }
   return {
-    cls: "border-green-300 bg-green-50 text-green-700",
-    icon: "✅",
-    text: "고를 때 쓰지 않은 검증 구간에서도 이익이 났습니다. 상대적으로 견고한 편이에요.",
+    cls: "notice-good",
+    label: "검증 통과",
+    text: "고를 때 쓰지 않은 검증 구간에서도 이익이 났어요. 상대적으로 견고한 편이에요.",
   };
 }
 
 function BestSummary({ best, v }) {
   const info = verdict(best, v);
   return (
-    <div className="space-y-2">
-      <div className="text-sm text-slate-700">
-        학습 구간 최적: <b>익절 {best.tp}% · 손절 {best.sl}%</b> →{" "}
-        <b className={tone(best.final_return_pct)}>{pct(best.final_return_pct)}</b>{" "}
-        <span className="text-slate-500">
+    <div className="space-y-3">
+      <div className="t-small text-slate-700">
+        학습 구간 최적: <b className="text-slate-900">익절 <span className="num">{best.tp}%</span> · 손절 <span className="num">{best.sl}%</span></b> →{" "}
+        <b className={"num " + tone(best.final_return_pct)}>{pct(best.final_return_pct)}</b>{" "}
+        <span className="text-slate-500 num">
           (MDD -{best.mdd_pct.toFixed(1)}% · 매매 {best.total_trades}회)
         </span>
       </div>
 
       {v?.split && best.oos_return_pct != null && (
-        <div className="text-sm text-slate-700">
-          같은 값의 <b>검증 구간</b> 성적:{" "}
-          <b className={tone(best.oos_return_pct)}>{pct(best.oos_return_pct)}</b>{" "}
-          <span className="text-slate-500">
+        <div className="t-small text-slate-700">
+          같은 값의 <b className="text-slate-900">검증 구간</b> 성적:{" "}
+          <b className={"num " + tone(best.oos_return_pct)}>{pct(best.oos_return_pct)}</b>{" "}
+          <span className="text-slate-500 num">
             (매매 {best.oos_trades}회
             {v.overfit_gap != null && ` · 학습 대비 ${v.overfit_gap >= 0 ? "-" : "+"}${Math.abs(v.overfit_gap).toFixed(2)}%p`})
           </span>
@@ -81,18 +107,18 @@ function BestSummary({ best, v }) {
       )}
 
       {info && (
-        <div className={"rounded-lg border px-3 py-2 text-xs " + info.cls}>
-          {info.icon} {info.text}
+        <div className={info.cls + " t-small text-slate-700"}>
+          <b className="text-slate-900">{info.label} · </b>{info.text}
         </div>
       )}
 
       {v?.split && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-          <span>학습 {v.train_label} ({v.train_bars}봉)</span>
-          <span>검증 {v.test_label} ({v.test_bars}봉)</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 t-caption text-slate-500">
+          <span>학습 {v.train_label} (<span className="num">{v.train_bars}</span>봉)</span>
+          <span>검증 {v.test_label} (<span className="num">{v.test_bars}</span>봉)</span>
           {v.generalization_rate != null && (
             <span>
-              학습에서 이익이던 조합 중 <b>{v.generalization_rate}%</b>가 검증에서도 이익
+              학습에서 이익이던 조합 중 <b className="num text-slate-700">{v.generalization_rate}%</b>가 검증에서도 이익
             </span>
           )}
         </div>
@@ -127,9 +153,9 @@ export default function OptimizePanel({ form, setForm, valErr }) {
     setForm((f) => ({ ...f, take_profit_pct: tp, stop_loss_pct: sl, use_stop_loss: true }));
   }
 
+  // 0%를 기준으로 좌우 같은 배율 — 한쪽이 더 튀면 손익이 편향돼 보인다(§2-2와 같은 이유).
   const returns = data ? data.cells.map((c) => c.final_return_pct) : [];
-  const min = returns.length ? Math.min(...returns) : 0;
-  const max = returns.length ? Math.max(...returns) : 0;
+  const extent = returns.length ? Math.max(...returns.map((v) => Math.abs(v))) : 0;
   const cellAt = (tp, sl) =>
     data?.cells.find((c) => c.tp === tp && c.sl === sl) || null;
   const isCurrent = (tp, sl) =>
@@ -137,37 +163,33 @@ export default function OptimizePanel({ form, setForm, valErr }) {
   const isBest = (tp, sl) => data?.best && data.best.tp === tp && data.best.sl === sl;
 
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5 space-y-4">
+    <section className="pt-5 border-t border-slate-200 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center text-sm font-semibold text-slate-700">
-          🔍 익절 / 손절 자동 최적화
+        <div className="flex items-center t-h4 text-slate-900">
+          익절 / 손절 자동 최적화
           <InfoTooltip term="optimize" />
         </div>
-        <button
-          onClick={run}
-          disabled={busy || !!valErr}
-          className="rounded-lg bg-brand hover:bg-brand-hover disabled:opacity-40 px-4 py-2 text-sm font-semibold text-brand-ink"
-        >
-          {busy ? "최적화 중…" : data ? "다시 최적화" : "최적화 실행"}
+        <button onClick={run} disabled={busy || !!valErr} className="btn btn-m btn-secondary">
+          {busy ? "최적화 중…" : data ? "다시 최적화" : "최적화 돌려보기"}
         </button>
       </div>
 
-      <p className="text-xs text-slate-500">
-        익절(가로)×손절(세로) 조합을 모두 돌려봅니다. 기간을 <b>학습</b>과 <b>검증</b>으로 나눠서, 학습 구간에서
-        고른 값이 <b>고를 때 쓰지 않은 검증 구간</b>에서도 통했는지까지 확인해요. 칸을 클릭하면 빌더에 적용됩니다.
+      <p className="t-small text-slate-700">
+        익절(가로)×손절(세로) 조합을 모두 돌려봐요. 기간을 <b className="text-slate-900">학습</b>과 <b className="text-slate-900">검증</b>으로 나눠서, 학습 구간에서
+        고른 값이 <b className="text-slate-900">고를 때 쓰지 않은 검증 구간</b>에서도 통했는지까지 확인해요. 칸을 누르면 빌더에 적용돼요.
       </p>
 
-      {error && <div className="text-sm text-red-600">오류: {error}</div>}
+      {error && <div className="t-small text-red-600">오류: {error}</div>}
 
       {data && (
         <>
           <div className="overflow-x-auto">
-            <table className="border-collapse text-xs">
+            <table className="border-collapse t-caption">
               <thead>
                 <tr>
-                  <th className="p-1.5 text-slate-400 font-medium sticky left-0 bg-surface">손절＼익절</th>
+                  <th className="p-2 font-semibold text-slate-700 sticky left-0 bg-slate-50">손절＼익절</th>
                   {data.tp_values.map((tp) => (
-                    <th key={tp} className="p-1.5 text-slate-500 font-medium text-center">
+                    <th key={tp} className="p-2 font-semibold text-slate-700 text-center num">
                       {tp}%
                     </th>
                   ))}
@@ -176,14 +198,14 @@ export default function OptimizePanel({ form, setForm, valErr }) {
               <tbody>
                 {data.sl_values.map((sl) => (
                   <tr key={sl}>
-                    <td className="p-1.5 text-slate-500 font-medium sticky left-0 bg-surface">{sl}%</td>
+                    <td className="p-2 font-semibold text-slate-700 sticky left-0 bg-slate-50 num">{sl}%</td>
                     {data.tp_values.map((tp) => {
                       const c = cellAt(tp, sl);
                       if (!c) return <td key={tp} />;
                       const best = isBest(tp, sl);
                       const cur = isCurrent(tp, sl);
                       return (
-                        <td key={tp} className="p-0.5">
+                        <td key={tp} className="p-1">
                           <button
                             onClick={() => applyCell(tp, sl)}
                             title={
@@ -194,12 +216,12 @@ export default function OptimizePanel({ form, setForm, valErr }) {
                                 : "검증 구간 없음 (기간이 짧아요)\n") +
                               "클릭하면 빌더에 적용"
                             }
-                            style={heatStyle(c.final_return_pct, min, max)}
+                            style={heatStyle(c.final_return_pct, extent)}
                             className={
-                              "w-full min-w-[64px] rounded px-1.5 py-2 text-center font-semibold text-slate-800 transition " +
-                              "hover:ring-2 hover:ring-indigo-400 " +
+                              "w-full min-w-[64px] rounded-md px-2 py-2 text-center font-bold num text-slate-800 transition " +
+                              "hover:ring-2 hover:ring-slate-400 " +
                               (best ? "outline outline-2 outline-green-600 " : "") +
-                              (cur ? "ring-2 ring-blue-500 " : "")
+                              (cur ? "ring-2 ring-brand-line " : "")
                             }
                           >
                             {c.final_return_pct >= 0 ? "+" : ""}
@@ -207,18 +229,13 @@ export default function OptimizePanel({ form, setForm, valErr }) {
                             {/* Held-out result under the fitted one: a cell that
                                 only worked because it was fitted shows it here. */}
                             {c.oos_return_pct != null && (
-                              <span
-                                className={
-                                  "block text-[10px] font-semibold " +
-                                  (c.oos_return_pct >= 0 ? "text-green-700" : "text-red-700")
-                                }
-                              >
+                              <span className="block text-[11px] font-semibold opacity-80">
                                 검증 {c.oos_return_pct >= 0 ? "+" : ""}
                                 {c.oos_return_pct.toFixed(1)}%
                               </span>
                             )}
-                            {best && <span className="block text-[10px] font-bold text-green-700">★ 최적</span>}
-                            {cur && !best && <span className="block text-[10px] text-blue-600">현재</span>}
+                            {best && <span className="block text-[11px] font-bold">★ 최적</span>}
+                            {cur && !best && <span className="block text-[11px] font-semibold">현재</span>}
                           </button>
                         </td>
                       );
@@ -229,14 +246,16 @@ export default function OptimizePanel({ form, setForm, valErr }) {
             </table>
           </div>
 
+          <HeatLegend extent={extent} />
+
           {data.best && <BestSummary best={data.best} v={data.validation} />}
 
-          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-            ⚠️ 과최적화 주의: 위 숫자는 <b>과거에 맞춰 고른</b> 값이라 미래 수익을 보장하지 않아요.
-            특정 한 칸만 튀는 조합보다 <b>주변까지 고르게 좋은 구간</b>이 더 믿을 만합니다.
+          <div className="notice-warn t-small text-slate-700">
+            <b className="text-slate-900">과최적화 주의:</b> 위 숫자는 <b className="text-slate-900">과거에 맞춰 고른</b> 값이라 미래 수익을 보장하지 않아요.
+            한 칸만 튀는 조합보다 <b className="text-slate-900">주변까지 고르게 좋은 구간</b>이 더 믿을 만해요.
           </div>
         </>
       )}
-    </div>
+    </section>
   );
 }

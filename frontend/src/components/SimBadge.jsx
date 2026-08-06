@@ -1,16 +1,11 @@
-// Always-on reminder that every number is a PAST SIMULATION, not live trading.
+// Shared reminder for both historical backtests and live-price paper results.
 export default function SimBadge({ className = "" }) {
   return (
     <span
-      className={
-        "inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 " +
-        "px-3 py-1 text-xs font-semibold text-amber-700 " +
-        className
-      }
-      title="이 수치는 과거 데이터 시뮬레이션 결과이며 실제 거래가 아닙니다."
+      className={"badge badge-ai " + className}
+      title="백테스트와 페이퍼 결과는 시뮬레이션이며 실제 거래가 아닙니다."
     >
-      <span aria-hidden>⚠️</span>
-      과거 시뮬레이션 결과 · 실거래 아님
+      모의 결과 · 실거래 아님
     </span>
   );
 }

@@ -31,11 +31,6 @@ const DOWN = "rgb(var(--chart-down))";
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-function hhmm(ms) {
-  const d = new Date(ms);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
 function fullTime(ms) {
   const d = new Date(ms);
   return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -48,13 +43,13 @@ function BarReadout({ bar, quote }) {
   const pct = bar.o ? ((bar.c - bar.o) / bar.o) * 100 : 0;
   const cell = (label, v) => (
     <span className="whitespace-nowrap">
-      <span className="text-slate-400">{label}</span>{" "}
-      <span className="num text-slate-700">{fmtPrice(v)}</span>
+      <span className="text-slate-500">{label}</span>{" "}
+      <span className="num font-semibold text-slate-900">{fmtPrice(v)}</span>
     </span>
   );
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-      <span className="font-semibold text-slate-600">{fullTime(bar.t)}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 t-caption">
+      <span className="text-slate-700 num">{fullTime(bar.t)}</span>
       {cell("시", bar.o)}
       {cell("고", bar.h)}
       {cell("저", bar.l)}
@@ -63,12 +58,8 @@ function BarReadout({ bar, quote }) {
         {rise ? "+" : ""}
         {pct.toFixed(2)}%
       </span>
-      {!bar.closed && (
-        <span className="rounded bg-indigo-100 text-indigo-700 border border-indigo-300 px-1.5 py-0.5 font-semibold">
-          진행 중
-        </span>
-      )}
-      <span className="text-slate-400">{quote}</span>
+      {!bar.closed && <span className="badge badge-flat">진행 중</span>}
+      <span className="text-slate-500">{quote}</span>
     </div>
   );
 }
@@ -76,7 +67,7 @@ function BarReadout({ bar, quote }) {
 function Chart({ candles, symbol, hover, setHover, onPan }) {
   const W = 720;
   const H = 260;
-  const pad = { l: 6, r: 62, t: 10, b: 18 };
+  const pad = { l: 6, r: 6, t: 10, b: 10 };
   const n = candles.length;
   const svgRef = useRef(null);
   const drag = useRef(null);
@@ -149,7 +140,8 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
       viewBox={`0 0 ${W} ${H}`}
       className="w-full h-auto touch-pan-y select-none cursor-crosshair"
       role="img"
-      aria-label={`${symbol} 봉차트`}
+      aria-label={`${symbol} 봉차트. 좌우 화살표로 봉별 값을 확인할 수 있어요.`}
+      tabIndex={0}
       onPointerMove={handleMove}
       onPointerLeave={(e) => {
         if (e.pointerType === "mouse") setHover(null);
@@ -158,14 +150,20 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
       onPointerDown={handleDown}
       onPointerUp={handleUp}
       onPointerCancel={() => (drag.current = null)}
+      onKeyDown={(event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End", "Escape"].includes(event.key)) return;
+        event.preventDefault();
+        if (event.key === "Escape") return setHover(null);
+        if (event.key === "Home") return setHover(0);
+        if (event.key === "End") return setHover(n - 1);
+        setHover((current) => {
+          const from = current == null ? n - 1 : current;
+          return Math.max(0, Math.min(n - 1, from + (event.key === "ArrowRight" ? 1 : -1)));
+        });
+      }}
     >
       {guides.map((v, i) => (
-        <g key={i}>
-          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="rgb(var(--chart-grid))" strokeWidth="1" />
-          <text x={W - pad.r + 5} y={y(v) + 3.5} fontSize="9" fill="rgb(var(--chart-axis))">
-            {fmtPrice(v)}
-          </text>
-        </g>
+        <line key={i} x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="rgb(var(--chart-grid))" strokeWidth="1" />
       ))}
 
       {candles.map((k, i) => {
@@ -194,22 +192,11 @@ function Chart({ candles, symbol, hover, setHover, onPan }) {
         <g pointerEvents="none">
           <line x1={cx(hover)} x2={cx(hover)} y1={pad.t} y2={H - pad.b} stroke="rgb(var(--chart-crosshair))" strokeWidth="1" strokeDasharray="2 3" opacity="0.8" />
           <line x1={pad.l} x2={W - pad.r} y1={y(candles[hover].c)} y2={y(candles[hover].c)} stroke="rgb(var(--chart-crosshair))" strokeWidth="1" strokeDasharray="2 3" opacity="0.55" />
-          <rect x={W - pad.r + 1} y={y(candles[hover].c) - 8} width={pad.r - 3} height={16} rx="3" fill="rgb(var(--chart-crosshair-tag))" />
-          <text x={W - pad.r + 5} y={y(candles[hover].c) + 3.5} fontSize="9" fill="#fff" fontWeight="600">
-            {fmtPrice(candles[hover].c)}
-          </text>
         </g>
       )}
 
-      {/* current price line + tag */}
+      {/* Current price is written at full UI size in the heading/readout. */}
       <line x1={pad.l} x2={W - pad.r} y1={y(last.c)} y2={y(last.c)} stroke={up ? UP : DOWN} strokeWidth="1" strokeDasharray="3 3" opacity="0.7" />
-      <rect x={W - pad.r + 1} y={y(last.c) - 8} width={pad.r - 3} height={16} rx="3" fill={up ? UP : DOWN} />
-      <text x={W - pad.r + 5} y={y(last.c) + 3.5} fontSize="9" fill="#fff" fontWeight="600">
-        {fmtPrice(last.c)}
-      </text>
-
-      <text x={pad.l} y={H - 5} fontSize="9" fill="rgb(var(--chart-axis))">{hhmm(first.t)}</text>
-      <text x={W - pad.r} y={H - 5} fontSize="9" fill="rgb(var(--chart-axis))" textAnchor="end">{hhmm(last.t)}</text>
     </svg>
   );
 }
@@ -323,49 +310,50 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
   const up = changePct >= 0;
   const inspected = hover != null && view[hover] ? view[hover] : last;
 
-  const btn =
-    "rounded-lg border border-slate-300 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 px-2 py-1 text-sm leading-none";
+  const btn = "btn btn-s btn-secondary w-9 px-0";
 
+  // 차트도 카드에 담지 않는다 — 캔버스 위에 그리고 구획은 괘선으로만(§1-3).
   return (
-    <div className="rounded-2xl bg-surface border border-slate-200 p-4 sm:p-5">
+    <div className="pt-4 border-t border-slate-200">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="flex items-baseline gap-2">
-          <h3 className="font-semibold">📈 {symbol}</h3>
+          <h3 className="t-title text-slate-900"><span className="num">{symbol}</span></h3>
           {last && (
             <>
-              <span className="text-lg font-bold num">{fmtPrice(last.c)}</span>
-              <span className="text-xs text-slate-500">{quote}</span>
-              <span className={"text-sm font-semibold num " + (up ? "text-green-600" : "text-red-600")}>
+              <span className="t-h4 num text-slate-900">{fmtPrice(last.c)}</span>
+              <span className="t-caption text-slate-500">{quote}</span>
+              <span className={"t-label font-bold num " + (up ? "text-green-600" : "text-red-600")}>
                 {up ? "+" : ""}
                 {changePct.toFixed(2)}%
               </span>
             </>
           )}
           {live && last && !last.closed && (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-red-600">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="flex items-center gap-1 t-caption font-bold text-red-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse motion-reduce:animate-none" />
               LIVE
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => applyZoom(zoom * 1.35)} disabled={zoom >= maxZoom} className={btn} title="축소 (더 많은 봉)">
+        <div className="flex items-center gap-2">
+          <button onClick={() => applyZoom(zoom * 1.35)} disabled={zoom >= maxZoom} className={btn} title="축소 (더 많은 봉)" aria-label="차트 축소">
             −
           </button>
-          <span className="text-xs text-slate-500 num w-14 text-center">{Math.min(zoom, total)}봉</span>
-          <button onClick={() => applyZoom(zoom * 0.7)} disabled={zoom <= MIN_ZOOM} className={btn} title="확대 (봉 자세히)">
+          <span className="t-caption text-slate-700 num w-14 text-center">{Math.min(zoom, total)}봉</span>
+          <button onClick={() => applyZoom(zoom * 0.7)} disabled={zoom <= MIN_ZOOM} className={btn} title="확대 (봉 자세히)" aria-label="차트 확대">
             +
           </button>
           {!live && (
-            <button onClick={() => setAnchor(null)} className="rounded-lg bg-brand hover:bg-brand-hover px-2 py-1 text-xs font-semibold text-brand-ink" title="최신 봉으로 이동">
+            <button onClick={() => setAnchor(null)} className="btn btn-s btn-secondary" title="최신 봉으로 이동">
               최신
             </button>
           )}
           <select
             value={interval}
+            aria-label="차트 봉 간격"
             onChange={(e) => setInterval_(e.target.value)}
-            className="rounded-lg bg-slate-100 border border-slate-300 px-2 py-1 text-sm"
+            className="field field-sm w-auto"
           >
             {INTERVALS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -380,13 +368,13 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-6 text-center text-sm text-amber-800">
-          차트를 불러오지 못했습니다: {error}
+        <div className="notice-warn py-6 t-small text-slate-700">
+          차트를 불러오지 못했어요: {error}
         </div>
       )}
 
       {!error && !candles && (
-        <div className="h-[200px] flex items-center justify-center text-sm text-slate-400">
+        <div className="h-[200px] flex items-center justify-center t-small text-slate-500">
           {loading ? "차트 불러오는 중…" : "—"}
         </div>
       )}
@@ -398,11 +386,17 @@ export default function CandleChart({ symbol, defaultInterval = "1m" }) {
       )}
 
       {!error && view.length > 0 && (
-        <div className="mt-2 flex items-center justify-between text-xs text-slate-400 flex-wrap gap-1">
-          <span>휠·＋/− 확대 · 드래그로 이동 · 봉 위에 올리면 시/고/저/종</span>
+        <div className="mt-2 space-y-1 t-caption text-slate-500">
+          <div className="flex items-center justify-between gap-3 num text-slate-700">
+            <span>{fullTime(view[0].t)}</span>
+            <span>{fullTime(view[view.length - 1].t)}</span>
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-1">
+          <span>휠·＋/− 확대 · 드래그로 이동 · 봉 위에서 시가·고가·저가·종가 확인</span>
           <span>
             {live ? "마지막 봉은 진행 중 (실시간 갱신)" : "과거 구간 보는 중"} · 바이낸스 공개 시세
           </span>
+          </div>
         </div>
       )}
     </div>
