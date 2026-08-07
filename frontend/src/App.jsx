@@ -17,6 +17,7 @@ const Studio = lazy(() => import("./pages/Studio.jsx"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard.jsx"));
 const Auth = lazy(() => import("./pages/Auth.jsx"));
 const MyPage = lazy(() => import("./pages/MyPage.jsx"));
+const RunnerDownload = lazy(() => import("./pages/RunnerDownload.jsx"));
 const Guide = lazy(() => import("./pages/Guide.jsx"));
 const News = lazy(() => import("./pages/News.jsx"));
 const Board = lazy(() => import("./pages/Board.jsx"));
@@ -172,6 +173,8 @@ function RouteChangeEffects() {
       ? "사용 가이드"
       : pathname.startsWith("/mypage")
       ? "내 활동"
+      : pathname.startsWith("/runner")
+      ? "매크로 실행기"
       : pathname.startsWith("/login")
       ? "로그인"
       : "껄무새";
@@ -234,6 +237,7 @@ export default function App() {
               <Route path="/builder" element={<Studio />} />
               <Route path="/s/:slug" element={<Studio />} />
               <Route path="/mypage" element={<MyPage />} />
+              <Route path="/runner" element={<RunnerDownload />} />
               <Route path="/guide" element={<Guide />} />
               <Route path="/news" element={<News />} />
               <Route path="/board" element={<Board />} />

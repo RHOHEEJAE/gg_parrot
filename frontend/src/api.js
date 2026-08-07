@@ -180,7 +180,42 @@ export const api = {
     req(`/api/paper/${sessionId}/stop`, { method: "POST", keepalive: !!options.keepalive }),
   paperStatus: (sessionId) => req(`/api/paper/${sessionId}`),
 
-  // real-trade executable bundle (demo mockup zip). Triggers a file download.
+  // 매크로 실행기(exe) 다운로드
+  runnerDownloadInfo: () => req("/api/runner/download/info"),
+  runnerDownloadUrl: "/api/runner/download",
+
+  // 매크로 실행기(exe) 연동 — 마이페이지용
+  runnerKey: () => req("/api/me/runner/key"),
+  runnerKeyRegenerate: () => req("/api/me/runner/key/regenerate", { method: "POST" }),
+  runnerSessions: () => req("/api/me/runner/sessions"),
+  // mode: "stop_only"(매크로만) | "close_and_stop"(청산 후 종료)
+  runnerRequestStop: (sessionId, mode) =>
+    req(`/api/me/runner/sessions/${sessionId}/request-stop`, {
+      method: "POST",
+      body: JSON.stringify({ mode }),
+    }),
+
+  // 매크로 파일(.ggm.json) 하나만 내려받기 — 실행기에 넣어서 구동한다.
+  async downloadMacroFile(macro) {
+    const res = await fetch("/api/realtrade/macro-file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ macro }),
+    });
+    if (!res.ok) throw new Error("매크로 파일 생성 실패");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `macro-${macro.rule_type}-${macro.position_side}.ggm.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  // real-trade executable bundle (레거시 zip: bot.py+run.bat). 실행기 방식으로
+  // 전환하면서 남겨둔 하위호환 다운로드.
   async downloadBundle(macro) {
     const res = await fetch("/api/realtrade/bundle", {
       method: "POST",

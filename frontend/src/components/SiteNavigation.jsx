@@ -5,6 +5,7 @@ const PRIMARY_LINKS = [
   { to: "/", label: "홈", description: "서비스 소개", icon: "home", end: true },
   { to: "/builder", label: "매크로 빌더", description: "조건 만들기와 검증", icon: "builder", matches: ["/builder", "/s/"] },
   { to: "/leaderboard", label: "리더보드", description: "오늘의 모의 수익률", icon: "leaderboard", matches: ["/leaderboard", "/gallery"] },
+  { to: "/runner", label: "매크로 실행기", description: "내 PC에서 실거래 실행", icon: "runner", matches: ["/runner"] },
 ];
 
 const BROWSE_LINKS = [
@@ -35,6 +36,7 @@ function NavGlyph({ name }) {
   if (name === "leaderboard") return <svg {...common}><path d="M5 20v-7h4v7" /><path d="M10 20V4h4v16" /><path d="M15 20v-11h4v11" /></svg>;
   if (name === "news") return <svg {...common}><path d="M4 5h16v14H4z" /><path d="M8 9h8" /><path d="M8 13h8" /><path d="M8 17h5" /></svg>;
   if (name === "board") return <svg {...common}><path d="M5 4h14v13H9l-4 3V4Z" /><path d="M8 8h8" /><path d="M8 12h6" /></svg>;
+  if (name === "runner") return <svg {...common}><path d="M12 3v11" /><path d="m8 11 4 4 4-4" /><path d="M5 20h14" /></svg>;
   return <svg {...common}><path d="M5 4.5h9a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z" /><path d="M8 8h6" /><path d="M8 12h6" /><path d="M17 8h2v12h-2" /></svg>;
 }
 

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api.js";
 import { useAuth, updateAuthUser } from "../lib/auth.js";
 import { PageHeader, SectionTitle, EmptyRow, Loading, ErrorNote } from "../components/Page.jsx";
+import RunnerSessions from "../components/RunnerSessions.jsx";
 
 const P = (n) => `${(n ?? 0).toLocaleString()}P`;
 
@@ -98,6 +99,9 @@ export default function MyPage() {
           </div>
         ))}
       </div>
+
+      {/* 매크로 실행기(exe) 실행 현황 + 회원 키 + 원격 종료 */}
+      <RunnerSessions />
 
       {/* created */}
       <Section title="내가 만든 매크로" count={created.length}>

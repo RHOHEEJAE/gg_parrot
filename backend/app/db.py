@@ -152,6 +152,54 @@ class MacroUnlock(SQLModel, table=True):
     created_at: str
 
 
+class RunnerKey(SQLModel, table=True):
+    """계정당 1개의 '껄무새 회원 키'. 매크로 실행기(로컬 exe)가 이 불투명 토큰으로
+    서버에 자신을 인증한다. API 키/시크릿은 절대 서버로 오지 않는다 — 오직 이 키와
+    구동 상태만 오간다. 재발급하면 기존 키는 무효가 된다(unique).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, unique=True)  # one key per account
+    key: str = Field(index=True, unique=True)  # 불투명 토큰 (예: "ggp_xxxxx")
+    created_at: str
+
+
+class RunSession(SQLModel, table=True):
+    """사용자 PC의 매크로 실행기가 돌리는 '한 번의 실거동' 세션.
+
+    실행기가 start 로 만들고, heartbeat 로 상태를 올리며, 마이페이지의 종료 버튼은
+    ``stop_mode`` 플래그만 세운다. 실행기가 다음 heartbeat 에서 그 플래그를 보고
+    종료(포지션 유지) 또는 청산 후 종료한 뒤 서버에 확정 보고한다.
+
+    거래소 API 키/시크릿은 이 테이블에 저장되지 않는다(로컬에서만 사용).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    # 실행 대상 요약 (마이페이지 표시용)
+    symbol: str = ""
+    position_side: str = "long"
+    leverage: int = 1
+    market: str = ""  # spot | futures
+    testnet: bool = True  # 실거래 여부: False = 메인넷(실제 자금)
+    human_summary: str = ""
+    # 수명주기: running -> stopped(정상) | error
+    status: str = Field(default="running", index=True)
+    # 마이페이지가 요청한 종료 방식: "" (계속) | "stop_only" | "close_and_stop"
+    stop_mode: str = ""
+    # 마지막 heartbeat 의 실시간 스냅샷
+    in_position: bool = False
+    last_price: float = 0.0
+    entry_price: float = 0.0
+    position_qty: float = 0.0
+    realized_pnl: float = 0.0  # 누적 실현손익(USDT)
+    unrealized_pct: float = 0.0  # 현재 포지션 평가손익(%)
+    note: str = ""  # 예: "청산 실패 — 포지션 남음"
+    started_at: str
+    last_heartbeat_at: str = ""
+    stopped_at: Optional[str] = None
+
+
 class DailyChallenge(SQLModel, table=True):
     """One day's AI challenge: the chosen symbol for a KST date (idempotency key)."""
 

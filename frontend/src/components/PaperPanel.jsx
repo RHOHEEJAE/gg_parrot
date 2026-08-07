@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import InfoTooltip from "./InfoTooltip.jsx";
 import { baseOf, fmtMoney, fmtMoneyCompact, fmtKrw, fmtPrice, fmtQty, quoteOf } from "../lib/format.js";
@@ -39,10 +40,10 @@ export function PaperPanelView({ macro, valErr, onRegister, controller }) {
   } = controller;
   const { rate: krwRate } = useUsdKrw();
 
-  async function downloadBot() {
+  async function downloadMacro() {
     setError("");
     try {
-      await api.downloadBundle(macro);
+      await api.downloadMacroFile(macro);
     } catch (e) {
       setError(String(e.message || e));
     }
@@ -255,17 +256,23 @@ export function PaperPanelView({ macro, valErr, onRegister, controller }) {
         </div>
       )}
 
-      {/* real-trade download. The bundle places REAL orders (testnet by
-          default) — the copy below must not understate that. */}
+      {/* real-trade: 매크로 파일(.ggm.json)만 내려받아 '껄무새 매크로 실행기'에 넣는다.
+          실행기가 실제 주문을 실행하므로(기본 테스트넷) 아래 문구는 그 위험을 축소하지 않는다. */}
       <div className="alert alert-warn space-y-3">
-        <div className="t-title">동작 검증 완료 → 실거래로 전환</div>
+        <div className="t-title">동작 검증 완료 → 매크로 실행기로 실거래</div>
         <p className="t-small">
-          실거래는 사용자 PC에서 본인의 API 키로 실행돼요. 본 도구는 투자 조언이 아니고, 실거래로 인한
-          손익 책임은 사용자에게 있어요.
+          터미널·파이썬 설치 없이 <b>껄무새 매크로 실행기</b>(프로그램)에 이 매크로 파일을 넣고 돌려요.
+          실행 현황과 원격 종료는 <b>마이페이지</b>에서 확인해요.
         </p>
         <div className="pt-3 border-t border-amber-700/30 space-y-2">
-          <p className="t-small font-bold">
-            주의: 이 파일은 <u>실제로 주문을 실행해요</u> (기본값: 바이낸스 테스트넷 = 가짜 자금)
+          <p className="t-small font-bold">진행 방법</p>
+          <ol className="t-small list-decimal pl-4 space-y-1">
+            <li>아래 버튼으로 <b>매크로 파일(.ggm.json)</b>을 내려받아요.</li>
+            <li>마이페이지에서 <b>껄무새 회원 키</b>를 복사해요(계정당 1개).</li>
+            <li>매크로 실행기를 열어 ①파일 ②실거래 여부 ③API 키 ④회원 키를 넣고 시작해요.</li>
+          </ol>
+          <p className="t-small font-bold pt-1">
+            주의: 실행기는 <u>실제로 주문을 실행해요</u> (기본값: 바이낸스 테스트넷 = 가짜 자금)
           </p>
           <ul className="t-small list-disc pl-4 space-y-1">
             <li>
@@ -274,16 +281,18 @@ export function PaperPanelView({ macro, valErr, onRegister, controller }) {
                 : "롱·1배 매크로라 현물(spot)로 실행돼요."}
             </li>
             <li>익절·손절·일일 최대손실·최대 보유시간·재진입 금지가 함께 적용돼요.</li>
-            <li>
-              실제 자금으로 바꾸려면 직접 <code className="num">USE_TESTNET=False</code> 로 고쳐야 하고, 코드가
-              자동으로 바꾸지 않아요.
-            </li>
-            <li>API 키는 메모리에서만 쓰고 저장·전송·기록하지 않아요. 출금 기능은 없어요.</li>
+            <li>실제 자금은 실행기에서 <b>실거래(메인넷) 체크</b>를 켜야 움직여요(경고 확인 단계 있음).</li>
+            <li>API 키는 실행기 로컬에서만 쓰고 서버로 전송·저장하지 않아요. 출금 기능은 없어요.</li>
           </ul>
         </div>
-        <button onClick={downloadBot} disabled={!!valErr} className="btn btn-m btn-secondary">
-          실거래 실행 파일 내려받기 (bot.py)
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={downloadMacro} disabled={!!valErr} className="btn btn-m btn-secondary">
+            매크로 파일 내려받기 (.ggm.json)
+          </button>
+          <Link to="/runner" className="t-small font-semibold text-slate-900 underline underline-offset-4 decoration-slate-300 hover:decoration-slate-900">
+            매크로 실행기 받기·사용법 →
+          </Link>
+        </div>
       </div>
     </section>
   );

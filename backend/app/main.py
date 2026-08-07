@@ -5,6 +5,7 @@ historical data. Every returned result represents a PAST SIMULATION.
 """
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -43,6 +44,7 @@ from . import auth as auth_mod
 from . import points as points_mod
 from . import account as account_mod
 from . import challenge as challenge_mod
+from . import runner as runner_mod
 from fastapi import Depends
 from .db import User
 # [차후 도입] 고래 동향 — app/whales.py 는 그대로 두고 라우트만 꺼둡니다.
@@ -189,6 +191,37 @@ class ExplainAiRequest(BaseModel):
 
 class BundleRequest(BaseModel):
     macro: Macro
+
+
+# --- 매크로 실행기(로컬 exe) 연동 모델 ---------------------------------
+class RunnerStartRequest(BaseModel):
+    symbol: str
+    position_side: str = "long"
+    leverage: int = 1
+    market: str = ""  # spot | futures | "" (서버가 방향/레버리지로 결정)
+    testnet: bool = True
+    human_summary: str = ""
+
+
+class RunnerHeartbeatRequest(BaseModel):
+    session_id: int
+    in_position: bool = False
+    last_price: float = 0.0
+    entry_price: float = 0.0
+    position_qty: float = 0.0
+    realized_pnl: float = 0.0
+    unrealized_pct: float = 0.0
+    note: str = ""
+
+
+class RunnerStoppedRequest(BaseModel):
+    session_id: int
+    status: str = "stopped"  # stopped | error
+    note: str = ""
+
+
+class RunnerStopRequest(BaseModel):
+    mode: str  # stop_only | close_and_stop
 
 
 class LeaderboardRegisterRequest(BaseModel):
@@ -886,6 +919,128 @@ def realtrade_bundle(req: BundleRequest) -> Response:
         content=data,
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# --- 매크로 실행기용 매크로 파일 (macro.json 하나만) -------------------
+@app.post("/api/realtrade/macro-file")
+def realtrade_macro_file(req: BundleRequest) -> Response:
+    """매크로 실행기(exe)에 넣을 정규화된 macro.json 을 반환한다.
+
+    실행기가 엔진을 내장하므로 bot.py/run.bat 없이 이 설정 파일 하나만 내려받아
+    실행기에 넣으면 된다(human_summary 동봉).
+    """
+    macro = req.macro
+    payload = macro.model_dump(mode="json")
+    payload["human_summary"] = human_summary(macro)
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    filename = f"macro-{macro.rule_type.value}-{macro.position_side.value}.ggm.json"
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ======================================================================
+#  매크로 실행기(로컬 exe) ↔ 서버 연동
+#  - 실행기용 엔드포인트: 회원 키(X-Runner-Key 헤더)로 인증
+#  - 마이페이지용 엔드포인트: 로그인 계정(JWT)로 인증
+# ======================================================================
+def _runner_user(x_runner_key: Optional[str] = Header(default=None)) -> User:
+    """X-Runner-Key 헤더의 회원 키를 계정으로 해석하는 의존성."""
+    return runner_mod.user_for_key(x_runner_key or "")
+
+
+# 실행기용 -------------------------------------------------------------
+@app.post("/api/runner/start")
+def runner_start(req: RunnerStartRequest, user: User = Depends(_runner_user)) -> dict:
+    return runner_mod.start_session(user, req.model_dump())
+
+
+@app.post("/api/runner/heartbeat")
+def runner_heartbeat(req: RunnerHeartbeatRequest, user: User = Depends(_runner_user)) -> dict:
+    snap = req.model_dump()
+    return runner_mod.heartbeat(user, snap.pop("session_id"), snap)
+
+
+@app.post("/api/runner/stopped")
+def runner_stopped(req: RunnerStoppedRequest, user: User = Depends(_runner_user)) -> dict:
+    return runner_mod.mark_stopped(user, req.session_id, req.status, req.note)
+
+
+# 마이페이지용 ---------------------------------------------------------
+@app.get("/api/me/runner/key")
+def runner_key_get(user: User = Depends(auth_mod.current_user)) -> dict:
+    return runner_mod.get_or_create_key(user.id)
+
+
+@app.post("/api/me/runner/key/regenerate")
+def runner_key_regen(user: User = Depends(auth_mod.current_user)) -> dict:
+    return runner_mod.regenerate_key(user.id)
+
+
+@app.get("/api/me/runner/sessions")
+def runner_sessions(user: User = Depends(auth_mod.current_user)) -> dict:
+    return runner_mod.list_sessions(user.id)
+
+
+@app.post("/api/me/runner/sessions/{session_id}/request-stop")
+def runner_request_stop(
+    session_id: int, req: RunnerStopRequest, user: User = Depends(auth_mod.current_user)
+) -> dict:
+    return runner_mod.request_stop(user.id, session_id, req.mode)
+
+
+# 실행기(exe) 배포 파일 다운로드 -----------------------------------------
+# 빌드한 exe 를 RUNNER_EXE_PATH 에 두면 서비스에서 바로 내려받게 한다. 없으면
+# 다운로드 페이지가 '준비 중' 으로 표시된다(available:false).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+_RUNNER_EXE_NAME = "껄무새매크로실행기.exe"
+_RUNNER_EXE_PATH = os.environ.get("RUNNER_EXE_PATH") or os.path.join(
+    _REPO_ROOT, "runner", "dist", _RUNNER_EXE_NAME
+)
+
+
+# 외부 배포 링크(GitHub Releases 등). 설정하면 서버에 파일을 두지 않아도 이 링크로
+# 내려받게 한다. 없으면 서버의 로컬 exe(_RUNNER_EXE_PATH)로 폴백한다.
+_RUNNER_DOWNLOAD_URL = os.environ.get("RUNNER_DOWNLOAD_URL", "").strip()
+
+
+@app.get("/api/runner/download/info")
+def runner_download_info() -> dict:
+    """실행기 파일의 준비 여부/크기/버전/외부링크. 다운로드 페이지가 버튼 상태를 정한다."""
+    if _RUNNER_DOWNLOAD_URL:
+        return {
+            "available": True,
+            "filename": _RUNNER_EXE_NAME,
+            "size": 0,  # 외부 링크라 크기 미상
+            "version": os.environ.get("RUNNER_EXE_VERSION", ""),
+            "url": _RUNNER_DOWNLOAD_URL,
+        }
+    exists = os.path.isfile(_RUNNER_EXE_PATH)
+    return {
+        "available": exists,
+        "filename": _RUNNER_EXE_NAME,
+        "size": os.path.getsize(_RUNNER_EXE_PATH) if exists else 0,
+        "version": os.environ.get("RUNNER_EXE_VERSION", ""),
+        "url": "",
+    }
+
+
+@app.get("/api/runner/download")
+def runner_download():
+    # 외부 링크가 설정돼 있으면 그리로 리다이렉트(GitHub Releases 등).
+    if _RUNNER_DOWNLOAD_URL:
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(_RUNNER_DOWNLOAD_URL)
+    if not os.path.isfile(_RUNNER_EXE_PATH):
+        raise HTTPException(status_code=404, detail="실행기 파일이 아직 준비되지 않았어요.")
+    from fastapi.responses import FileResponse
+
+    return FileResponse(
+        _RUNNER_EXE_PATH, media_type="application/octet-stream", filename=_RUNNER_EXE_NAME
     )
 
 
